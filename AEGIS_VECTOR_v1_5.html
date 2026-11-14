@@ -1,0 +1,3693 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AEGIS VECTOR // Tactical Command v1.5 — Geo Map & Budget HUD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-void: #04090d;
+      --panel-bg: rgba(7, 16, 23, 0.88);
+      --panel-border: rgba(34, 211, 238, 0.24);
+      --phosphor-cyan: #22d3ee;
+      --phosphor-green: #10b981;
+      --alert-amber: #f59e0b;
+      --alert-red: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body, canvas, .c2-panel, .c2-btn { user-select: none; }
+    input, textarea, select, [contenteditable="true"], .selectable-text { user-select: text; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-void);
+      color: #e2e8f0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Subtle CRT / tactical glass panel styling */
+    .c2-panel {
+      background: var(--panel-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .c2-btn {
+      transition: all 0.14s ease;
+    }
+    .c2-btn:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+
+    /* Custom thin scrollbar for mobile unit dock */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    @keyframes pulse-danger {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); border-color: rgba(239, 68, 68, 0.9); }
+      50% { box-shadow: 0 0 18px 2px rgba(239, 68, 68, 0.35); border-color: rgba(252, 165, 165, 1); }
+    }
+    .ballistic-alert-pulse {
+      animation: pulse-danger 0.9s infinite;
+    }
+
+    canvas#tacticalCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    canvas#tacticalCanvas.panning {
+      cursor: grabbing;
+    }
+  </style>
+
+  <style id="aegis-stage1-layout">
+    :root { --avx-safe-top: env(safe-area-inset-top, 0px); --avx-safe-bottom: env(safe-area-inset-bottom, 0px); }
+    html, body { width:100%; height:100%; min-height:100%; }
+    body { overflow:hidden; }
+    #tacticalCanvas { position:fixed; inset:0; width:100%; height:100%; }
+    header.fixed.top-0 { min-height:52px; height:52px; padding-top:var(--avx-safe-top); z-index:40; flex-wrap:nowrap; }
+    #waveStatusContainer { top:60px; z-index:25; max-width:min(520px,calc(100vw - 24px)); }
+    #citiesDrawer { top:104px; left:12px; width:min(190px,calc(100vw - 24px)); max-width:190px; max-height:calc(100dvh - 250px); z-index:22; }
+    #citiesList { max-height:min(36vh,360px); overflow:auto; }
+    #inspectorPanel { top:104px; right:12px; width:min(320px,calc(100vw - 24px)); max-height:calc(100dvh - 230px); overflow-y:auto; overscroll-behavior:contain; z-index:35; }
+    #avxDeck { position:fixed; top:104px; right:12px; bottom:auto; width:min(292px,calc(100vw - 24px)); max-height:calc(100dvh - 250px); overflow:hidden; z-index:24; }
+    #avxDeck .avx-body { max-height:calc(100dvh - 310px); overflow-y:auto; overscroll-behavior:contain; }
+    body.avx-inspector-open #avxDeck { display:none; }
+    body.avx-inspector-open #citiesDrawer { display:none; }
+    body.avx-deck-open #citiesDrawer { display:none; }
+    #scaleHudContainer { left:12px; bottom:92px; max-width:calc(100vw - 210px); z-index:21; }
+    #scaleHudContainer > div { max-width:100%; }
+    #minimapCanvas { display:block; max-width:100%; }
+    #minimapCanvas { width:164px; height:104px; }
+    #minimapCanvas.parent { max-width:100%; }
+    body > div:has(> #minimapCanvas) { right:12px; bottom:92px; z-index:21; }
+    footer.fixed.bottom-2 { left:8px; right:8px; bottom:max(8px,var(--avx-safe-bottom)); z-index:28; }
+    #unitDock { max-width:100%; width:max-content; min-width:0; overflow-x:auto; overscroll-behavior-x:contain; }
+    #placementBar { bottom:174px; left:50%; max-width:calc(100vw - 24px); z-index:32; }
+    #combatLogBox { bottom:190px; }
+    .avx-deck.collapsed .avx-body { display:none; }
+    .avx-deck .avx-head { min-height:40px; }
+    .avx-deck .avx-btn, .avx-deck button { min-height:32px; }
+    button, [role="button"] { touch-action:manipulation; }
+    @media (max-width:760px) {
+      header.fixed.top-0 { gap:5px; padding-left:8px; padding-right:8px; }
+      header.fixed.top-0 > div:nth-child(2) { display:none; }
+      header.fixed.top-0 > div:first-child { flex:1 1 auto; min-width:0; }
+      header.fixed.top-0 > div:last-child { flex:0 1 auto; gap:4px; }
+      header.fixed.top-0 > div:last-child button[onclick="openSupportModal()"] { display:none; }
+      #waveStatusContainer { top:58px; width:auto; max-width:calc(100vw - 16px); }
+      #wavePill { max-width:100%; padding:6px 10px; gap:6px; }
+      #wavePhaseText { font-size:10px; }
+      #citiesDrawer { top:116px; left:8px; width:min(148px,calc(50vw - 12px)); max-width:none; }
+      #citiesDrawer > button { width:100%; font-size:10px; padding:6px 7px; }
+      #citiesList { max-height:22vh; }
+      #inspectorPanel { top:116px; right:8px; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 220px); padding:10px; }
+      #avxDeck { top:116px; right:8px; width:min(178px,calc(50vw - 12px)); max-height:calc(100dvh - 250px); }
+      #avxDeck .avx-head { padding:7px 8px; min-height:36px; font-size:10px; }
+      #avxDeck .avx-body { max-height:calc(100dvh - 300px); padding:8px; }
+      #avxDeck .avx-primary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      #avxDeck .avx-stat { padding:5px; }
+      #avxDeck .avx-stat b { font-size:13px; }
+      #avxDeck .avx-label { font-size:8px; }
+      #avxDeck .avx-actions { grid-template-columns:1fr; }
+      #scaleHudContainer { left:8px; bottom:88px; max-width:calc(100vw - 132px); }
+      #scaleHudContainer > div:first-child { display:none; }
+      #scaleHudContainer > div:nth-child(2) { gap:5px; padding:6px; }
+      #scaleBarGraphic { width:58px !important; max-width:58px; }
+      #scaleHudContainer .h-6.w-px { display:none; }
+      #scaleHudContainer .flex.items-center.gap-1 { gap:3px; }
+      #scaleHudContainer button { width:26px; height:28px; padding:0 5px; }
+      #hudZoomLevel { min-width:38px; font-size:10px; }
+      body > div:has(> #minimapCanvas) { right:8px; bottom:88px; padding:3px; }
+      #minimapCanvas { width:104px; height:66px; }
+      footer.fixed.bottom-2 { left:6px; right:6px; bottom:max(6px,var(--avx-safe-bottom)); }
+      #unitDock { max-width:100%; gap:5px; padding:5px; }
+      #unitDock > * { flex:0 0 auto; }
+      #placementBar { bottom:166px; width:max-content; max-width:calc(100vw - 16px); padding:7px 9px; gap:7px; border-radius:12px; flex-wrap:wrap; justify-content:center; }
+      #placementHintText { white-space:normal; text-align:center; font-size:10px; }
+      #combatLogBox { display:none !important; }
+      body.avx-deck-open #citiesDrawer { display:none; }
+      body.avx-deck-open #avxDeck { width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 180px); }
+      body.avx-deck-open #avxDeck .avx-body { max-height:calc(100dvh - 235px); }
+    }
+    @media (max-width:390px) {
+      header.fixed.top-0 .font-mono-tech { letter-spacing:.02em; }
+      header.fixed.top-0 button { min-width:28px; }
+      #scaleBarGraphic { display:none; }
+      #scaleHudContainer > div:nth-child(2) { gap:4px; }
+      #minimapCanvas { width:92px; height:58px; }
+      body > div:has(> #minimapCanvas) { right:6px; }
+      #scaleHudContainer { max-width:calc(100vw - 124px); }
+      #avxDeck { width: min(158px,calc(50vw - 12px)); }
+    }
+    @media (max-height:520px) and (orientation:landscape) {
+      header.fixed.top-0 { height:46px; min-height:46px; }
+      #waveStatusContainer { top:50px; left:8px; right:228px; width:auto; max-width:none; transform:none; align-items:flex-start; }
+      #wavePill { padding:3px 8px; max-width:100%; }
+      #wavePhaseText { font-size:9px; }
+      #citiesDrawer { display:none !important; }
+      #avxDeck { top:50px; width:min(210px,34vw); max-height:calc(100dvh - 145px); }
+      #avxDeck.collapsed .avx-body { display:none; }
+      #inspectorPanel { top:50px; max-height:calc(100dvh - 110px); }
+      #scaleHudContainer { left:8px; bottom:66px; }
+      body > div:has(> #minimapCanvas) { right:8px; bottom:66px; }
+      #minimapCanvas { width:92px; height:58px; }
+      footer.fixed.bottom-2 { bottom:4px; }
+      #placementBar { bottom:134px; }
+    }
+    @media (min-width:761px) {
+      #avxDeck { top:104px; right:12px; }
+      #inspectorPanel { top:104px; }
+    }
+  </style>
+
+
+  <style id="aegis-v15-budget-map-ui">
+    @media (max-width:760px) {
+      header.fixed.top-0 > div:nth-child(2) { display:flex !important; flex:0 0 auto; min-width:0; gap:0; }
+      #budgetMetric { padding:3px 6px; gap:4px; white-space:nowrap; }
+      #budgetMetric > span:first-child { font-size:8px; letter-spacing:0; }
+      #budgetMetric #hudMoney { font-size:12px; }
+      header.fixed.top-0 > div:nth-child(2) > div:not(#budgetMetric) { display:none !important; }
+      header.fixed.top-0 > div:first-child { gap:4px; }
+      header.fixed.top-0 > div:first-child > div:first-child span:last-child { font-size:10px; letter-spacing:.02em; }
+      header.fixed.top-0 > div:first-child > div:nth-child(3) { padding-left:5px; padding-right:5px; }
+      header.fixed.top-0 > div:last-child { gap:3px; }
+      header.fixed.top-0 > div:last-child button { min-width:25px; }
+    }
+    @media (max-width:360px) {
+      header.fixed.top-0 > div:first-child > div:first-child span:last-child { font-size:9px; }
+      #btnAudio { display:none !important; }
+      header.fixed.top-0 > div:last-child button { min-width:24px; padding-left:5px; padding-right:5px; }
+    }
+    #mapDataAttribution { position:absolute; left:3px; right:3px; bottom:3px; z-index:3; display:flex; flex-direction:column; gap:1px; width:auto; max-width:none; min-width:0; overflow-wrap:anywhere; margin:0; padding:2px 3px; border-radius:4px; background:rgba(2,6,12,.88); color:#9fb4c2; font:7px/1.25 Inter, sans-serif; text-align:right; pointer-events:auto; }
+    #mapDataAttribution span { display:block; white-space:normal; overflow-wrap:anywhere; }
+    #mapDataAttribution a { color:#c7dce8; text-decoration:underline; text-underline-offset:1px; }
+  </style>
+
+</head>
+<body class="relative w-screen h-screen overflow-hidden select-none">
+
+  <!-- MAIN HIGH-DPI RADAR CANVAS -->
+  <canvas id="tacticalCanvas"></canvas>
+
+  <!-- TOP COMMAND HEADER BAR -->
+  <header class="fixed top-0 inset-x-0 z-30 h-12 px-2 sm:px-4 c2-panel border-t-0 border-x-0 flex items-center justify-between gap-2">
+    <!-- Brand & Wave Info -->
+    <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] animate-pulse"></span>
+        <span class="font-mono-tech font-bold tracking-wider text-xs sm:text-sm text-cyan-300 whitespace-nowrap">AEGIS VECTOR</span>
+      </div>
+      <div class="h-4 w-px bg-cyan-900/60 hidden sm:block"></div>
+      <div class="flex items-center gap-1.5 bg-slate-900/90 border border-cyan-500/30 rounded-lg px-2 py-0.5">
+        <span class="text-[10px] uppercase tracking-wider text-slate-400 hidden md:inline">Хвиля</span>
+        <span id="hudWave" class="font-mono-tech font-bold text-xs sm:text-sm text-cyan-300">1</span>
+      </div>
+    </div>
+
+    <!-- Core Telemetry Metrics -->
+    <div class="flex items-center gap-1.5 sm:gap-3">
+      <!-- Budget -->
+      <div id="budgetMetric" class="flex items-center gap-1.5 bg-emerald-950/75 border border-emerald-400/55 rounded-lg px-2 py-0.5 shadow-[0_0_12px_rgba(16,185,129,.12)]" title="Ігровий бюджет командування — умовні ресурси" aria-label="Поточний бюджет командування">
+        <span class="text-[9px] uppercase tracking-wide text-emerald-200/90">БЮДЖЕТ</span>
+        <span class="text-emerald-400 text-xs font-bold">$</span>
+        <span id="hudMoney" class="font-mono-tech font-bold text-xs sm:text-sm text-emerald-200">950</span>
+      </div>
+      <!-- Infrastructure Integrity -->
+      <div class="flex items-center gap-1 bg-slate-900/90 border border-cyan-500/30 rounded-lg px-2 py-0.5" title="Цілісність критичної інфраструктури України">
+        <span class="text-[10px] text-slate-400 hidden sm:inline">ІНФРА:</span>
+        <span id="hudInfra" class="font-mono-tech font-bold text-xs sm:text-sm text-cyan-300">100%</span>
+      </div>
+      <!-- Score -->
+      <div class="hidden sm:flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 rounded-lg px-2 py-0.5" title="Бойовий рахунок">
+        <span class="text-[10px] text-slate-400">ОЧКИ:</span>
+        <span id="hudScore" class="font-mono-tech font-bold text-xs sm:text-sm text-slate-200">0</span>
+      </div>
+    </div>
+
+    <!-- Time Controls & Utility Buttons -->
+    <div class="flex items-center gap-1 sm:gap-1.5">
+      <div class="flex items-center bg-slate-950/90 border border-slate-700/80 rounded-lg p-0.5">
+        <button id="btnSpeed0" onclick="setGameSpeed(0)" title="Пауза (Space)" class="c2-btn px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-mono-tech font-semibold text-slate-300 hover:text-white">⏸</button>
+        <button id="btnSpeed1" onclick="setGameSpeed(1)" title="Нормальна швидкість (1x)" class="c2-btn px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-mono-tech font-semibold bg-cyan-500/25 text-cyan-300 border border-cyan-400/40">1x</button>
+        <button id="btnSpeed2" onclick="setGameSpeed(2)" title="Прискорення (2x)" class="c2-btn px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-mono-tech font-semibold text-slate-300 hover:text-white">2x</button>
+      </div>
+
+      <button id="btnAudio" onclick="toggleAudio()" title="Звук РЛС та сирен" class="c2-btn c2-panel rounded-lg w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-xs text-cyan-300 hover:border-cyan-400">
+        🔊
+      </button>
+      <button onclick="openHelpModal()" title="Тактичний довідник та клавіші" class="c2-btn c2-panel rounded-lg w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center font-mono-tech font-bold text-xs text-cyan-300 hover:border-cyan-400">
+        ?
+      </button>
+      <button onclick="openSupportModal()" title="Підтримати проєкт" class="c2-btn bg-amber-500/15 border border-amber-400/40 hover:bg-amber-500/25 rounded-lg px-2 h-7 sm:h-8 flex items-center gap-1 text-[11px] font-semibold text-amber-300">
+        <span>🇺🇦</span>
+        <span class="hidden md:inline">Підтримати</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- WAVE STATUS / PREP PHASE / BALLISTIC WARNING BANNER -->
+  <div id="waveStatusContainer" class="fixed top-14 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5 pointer-events-none w-full max-w-md px-3">
+    <!-- Prep / Active Wave Pill -->
+    <div id="wavePill" class="pointer-events-auto c2-panel rounded-full px-3.5 py-1.5 flex items-center gap-2.5 shadow-lg">
+      <span id="wavePhaseDot" class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+      <span id="wavePhaseText" class="font-mono-tech text-[11px] sm:text-xs font-semibold tracking-wide text-slate-200">
+        ПІДГОТОВКА ДО ХВИЛІ 1
+      </span>
+      <button id="btnStartWave" onclick="startNextWaveNow()" class="c2-btn bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] px-2.5 py-0.5 rounded-full tracking-wide shadow-[0_0_12px_rgba(34,211,238,0.45)]">
+        ▶ СТАРТ
+      </button>
+    </div>
+
+    <!-- Urgent Ballistic / SEAD Alert Banner (hidden by default) -->
+    <div id="urgentBanner" class="hidden ballistic-alert-pulse bg-red-950/90 border border-red-500 rounded-xl px-3.5 py-1.5 flex items-center gap-2 text-xs font-mono-tech font-bold text-red-200 shadow-xl">
+      <span>⚠️</span>
+      <span id="urgentBannerText">УВАГА: БАЛІСТИЧНА РАКЕТА! ПОТРІБЕН PATRIOT PAC-3</span>
+    </div>
+  </div>
+
+  <!-- LEFT STRATEGIC CITIES STATUS STRIP (Collapsible on small screens) -->
+  <aside id="citiesDrawer" class="fixed top-28 left-2.5 sm:left-3 z-20 flex flex-col gap-1.5 max-w-[195px]">
+    <button onclick="toggleCitiesList()" class="c2-btn c2-panel rounded-lg px-2.5 py-1 flex items-center justify-between gap-2 text-[11px] font-mono-tech text-cyan-300 hover:border-cyan-400">
+      <span>🏛 ВУЗЛИ ППО (8)</span>
+      <span id="citiesToggleIcon">▾</span>
+    </button>
+    <div id="citiesList" class="c2-panel rounded-xl p-1.5 flex flex-col gap-1 max-h-[38vh] overflow-y-auto no-scrollbar">
+      <!-- Populated dynamically by JS -->
+    </div>
+  </aside>
+
+  <!-- RIGHT INSPECTOR PANEL (For Selected SAM/Sensor OR Damaged City) -->
+  <aside id="inspectorPanel" class="hidden fixed top-14 sm:top-28 right-2.5 sm:right-3 z-30 w-72 sm:w-80 c2-panel rounded-2xl p-3.5 text-xs shadow-2xl">
+    <div class="flex items-start justify-between gap-2 pb-2 border-b border-slate-700/70">
+      <div>
+        <div class="flex items-center gap-1.5">
+          <span id="inspBadge" class="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/40 font-mono-tech text-[10px] text-cyan-300">ЗРК</span>
+          <h3 id="inspTitle" class="font-bold text-sm text-white">Patriot PAC-3</h3>
+        </div>
+        <p id="inspSubtitle" class="text-[11px] text-slate-400 mt-0.5">Дальність: 120.0 км • Збито: 0</p>
+      </div>
+      <button onclick="closeInspector()" class="c2-btn w-6 h-6 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold">✕</button>
+    </div>
+
+    <!-- Dynamic Body (Unit Controls or City Infrastructure Controls) -->
+    <div id="inspectorBody" class="mt-2.5 flex flex-col gap-2.5"></div>
+  </aside>
+
+  <!-- COMBAT LOG TICKER (Compact bottom-left above scale bar on desktop) -->
+  <div id="combatLogBox" class="hidden md:flex fixed bottom-36 left-3 z-10 flex-col gap-1 max-w-xs pointer-events-none opacity-85">
+    <!-- Log entries injected by JS -->
+  </div>
+
+  <!-- BOTTOM-LEFT HUD: DYNAMIC KILOMETRIC MAP SCALE RULER + ZOOM CONTROLS + COORDS -->
+  <div id="scaleHudContainer" class="fixed bottom-20 sm:bottom-24 left-2.5 sm:left-3 z-20 flex flex-col gap-1.5 pointer-events-none">
+    <!-- Live Military Geographic Coordinates -->
+    <div class="pointer-events-auto inline-flex items-center gap-2 c2-panel rounded-lg px-2.5 py-1 text-[10px] sm:text-[11px] font-mono-tech text-slate-300 w-fit">
+      <span class="text-cyan-400">КООРД. ≈:</span>
+      <span id="hudCoords">49.02°N 31.48°E</span>
+      <span class="text-slate-600">|</span>
+      <span id="hudMgrs" class="text-slate-400" title="Умовна координатна сітка карти; не є координатами MGRS">СІТКА X388 Y310</span>
+    </div>
+
+    <!-- Scale Ruler & Zoom Controls Row -->
+    <div class="pointer-events-auto c2-panel rounded-xl px-2.5 py-1.5 flex items-center gap-2.5 shadow-lg">
+      <!-- Dynamic Kilometric Scale Bar -->
+      <div class="flex flex-col justify-center">
+        <div class="flex items-center justify-between text-[10px] font-mono-tech font-semibold text-cyan-300 leading-none mb-1">
+          <span>0</span>
+          <span id="scaleMidLabel" class="text-slate-400">50</span>
+          <span id="scaleMaxLabel">100 км</span>
+        </div>
+        <!-- Segmented NATO Ruler Graphic -->
+        <div id="scaleBarGraphic" class="h-2.5 border-x border-b border-cyan-300 flex overflow-hidden rounded-[2px]" style="width: 140px;">
+          <div class="w-1/4 h-full bg-cyan-400"></div>
+          <div class="w-1/4 h-full bg-slate-950/90 border-l border-cyan-400/60"></div>
+          <div class="w-1/4 h-full bg-cyan-400"></div>
+          <div class="w-1/4 h-full bg-slate-950/90 border-l border-cyan-400/60"></div>
+        </div>
+      </div>
+
+      <div class="h-6 w-px bg-slate-700/80"></div>
+
+      <!-- Zoom Buttons & Zoom Badge -->
+      <div class="flex items-center gap-1">
+        <button onclick="zoomByFactor(0.8)" title="Віддалити (-)" class="c2-btn w-7 h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-300 font-mono-tech font-bold text-sm flex items-center justify-center">−</button>
+        <span id="hudZoomLevel" class="font-mono-tech text-[11px] font-semibold text-slate-200 px-1 min-w-[44px] text-center">1.00x</span>
+        <button onclick="zoomByFactor(1.25)" title="Наблизити (+)" class="c2-btn w-7 h-7 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-300 font-mono-tech font-bold text-sm flex items-center justify-center">+</button>
+        <button onclick="resetCameraFit()" title="Вся карта України (F)" class="c2-btn h-7 px-2 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/40 text-cyan-300 font-mono-tech font-semibold text-[10px] tracking-wider">FIT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM-RIGHT HUD: INTERACTIVE TACTICAL MINIMAP -->
+  <div class="fixed bottom-20 sm:bottom-24 right-2.5 sm:right-3 z-20 c2-panel rounded-xl p-1 shadow-lg">
+    <canvas id="minimapCanvas" width="164" height="104" class="block w-[124px] h-[78px] sm:w-[164px] sm:h-[104px] rounded-lg cursor-pointer"></canvas>
+    <div id="mapDataAttribution"><span id="mapDataStatus">ЗАВАНТАЖЕННЯ ГЕОДАНИХ…</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> • <a href="https://github.com/darmat1/ukraine-geo-data" target="_blank" rel="noopener noreferrer">ODbL data</a></span></div>
+  </div>
+
+  <!-- PLACEMENT MODE FLOATING BAR (Visible only when placing a unit) -->
+  <div id="placementBar" class="hidden fixed bottom-20 sm:bottom-24 left-1/2 -translate-x-1/2 z-30 c2-panel border-cyan-400/60 rounded-full px-3.5 py-1.5 flex items-center gap-3 shadow-2xl">
+    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+    <span id="placementHintText" class="text-[11px] sm:text-xs font-medium text-cyan-200 whitespace-nowrap">
+      Оберіть позицію на території України
+    </span>
+    <button onclick="cancelPlacement()" class="c2-btn bg-red-500/25 hover:bg-red-500/40 border border-red-400/60 text-red-200 font-mono-tech font-semibold text-[11px] px-2.5 py-0.5 rounded-full whitespace-nowrap">
+      ✕ Скасувати (ESC)
+    </button>
+  </div>
+
+  <!-- BOTTOM CENTER TACTICAL UNIT BUILD DOCK -->
+  <footer class="fixed bottom-2 inset-x-2 z-20 flex justify-center pointer-events-none">
+    <div id="unitDock" class="pointer-events-auto c2-panel rounded-2xl p-1.5 flex items-center gap-1.5 sm:gap-2 max-w-full overflow-x-auto no-scrollbar shadow-2xl">
+      <!-- Populated dynamically by JS -->
+    </div>
+  </footer>
+
+  <!-- WAVE SUMMARY / VICTORY / DEFEAT MODAL -->
+  <div id="debriefModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="c2-panel rounded-2xl max-w-md w-full p-5 sm:p-6 border-cyan-400/40 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-700/80 pb-3">
+        <div>
+          <span id="debriefTag" class="font-mono-tech text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">ЗВІТ ППО</span>
+          <h2 id="debriefTitle" class="text-lg sm:text-xl font-bold text-white mt-1.5">Хвилю 1 відбито</h2>
+        </div>
+        <div id="debriefIcon" class="text-3xl">🛡️</div>
+      </div>
+
+      <p id="debriefSummary" class="text-xs sm:text-sm text-slate-300 mt-3 leading-relaxed">
+        Аналіз бойової роботи розрахунків протиповітряної оборони.
+      </p>
+
+      <!-- Honest Telemetry Grid -->
+      <div class="grid grid-cols-2 gap-2.5 mt-4 font-mono-tech">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
+          <div class="text-[10px] text-slate-400">ЗНИЩЕНО ЦІЛЕЙ</div>
+          <div id="statDestroyed" class="text-base font-bold text-emerald-400 mt-0.5">0 / 0</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
+          <div class="text-[10px] text-slate-400">ПРОРВАЛОСЬ ДО ЦІЛЕЙ</div>
+          <div id="statLeaked" class="text-base font-bold text-red-400 mt-0.5">0</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
+          <div class="text-[10px] text-slate-400">ТОЧНІСТЬ ВОГНЮ</div>
+          <div id="statAccuracy" class="text-base font-bold text-cyan-300 mt-0.5">0%</div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
+          <div class="text-[10px] text-slate-400">БОНУС ЗА ХВИЛЮ</div>
+          <div id="statReward" class="text-base font-bold text-amber-300 mt-0.5">+$0</div>
+        </div>
+      </div>
+
+      <div id="debriefBonusesList" class="mt-3 text-[11px] text-slate-400 space-y-1"></div>
+
+      <div class="mt-5 flex items-center gap-2.5">
+        <button id="debriefPrimaryBtn" onclick="handleDebriefAction()" class="c2-btn flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2.5 px-4 rounded-xl text-xs sm:text-sm tracking-wide shadow-[0_0_16px_rgba(34,211,238,0.4)]">
+          ПЕРЕЙТИ ДО ПІДГОТОВКИ ХВИЛІ 2
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HELP / TACTICAL MANUAL MODAL -->
+  <div id="helpModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="c2-panel rounded-2xl max-w-lg w-full p-5 max-h-[88vh] overflow-y-auto border-cyan-400/40">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-2.5">
+        <h2 class="font-bold text-base sm:text-lg text-cyan-300">📘 Тактичний довідник AEGIS VECTOR</h2>
+        <button onclick="closeHelpModal()" class="c2-btn w-7 h-7 rounded-lg bg-slate-800 text-slate-300 font-bold">✕</button>
+      </div>
+      <div class="mt-3 space-y-3 text-xs text-slate-300 leading-relaxed">
+        <div>
+          <h4 class="font-bold text-white mb-1">🎯 Основи командування:</h4>
+          <ul class="list-disc pl-4 space-y-1 text-slate-300">
+            <li>Розгортайте ешелоновану ППО в межах контуру України. Використовуйте <b>масштабну лінійку (км)</b> зліва знизу для розрахунку перекриття зон.</li>
+            <li><b>Ручне цілевказання:</b> натисніть на будь-яку виявлену ворожу ціль на радарі, щоб закріпити пріоритетний маркер <b>[!]</b> — найближчий здатний ЗРК атакує її негайно.</li>
+            <li><b>Протирадіолокаційні ракети Х-31П:</b> наводяться на увімкнені РЛС (Patriot, IRIS-T, Gepard). Увімкніть <b>Радіотишу (EMCON)</b> у меню комплексу або прикрийте його Gepard!</li>
+            <li><b>Балістика (Іскандер-М / Кинджал):</b> перехоплюється <b>ЛИШЕ</b> комплексами <b>Patriot PAC-3</b>.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-white mb-1">⌨️ Гарячі клавіші та керування:</h4>
+          <div class="grid grid-cols-2 gap-1.5 font-mono-tech text-[11px] bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+            <div><span class="text-cyan-300">1 – 5</span> : Вибір засобу ППО</div>
+            <div><span class="text-cyan-300">Space</span> : Пауза / Продовжити</div>
+            <div><span class="text-cyan-300">R</span> : Поповнити БК ЗРК</div>
+            <div><span class="text-cyan-300">E</span> : Радіотиша (EMCON)</div>
+            <div><span class="text-cyan-300">+ / -</span> : Масштаб карти</div>
+            <div><span class="text-cyan-300">F / Esc</span> : Огляд / Скасувати</div>
+          </div>
+        </div>
+      </div>
+      <button onclick="closeHelpModal()" class="c2-btn mt-4 w-full bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-200 font-semibold py-2 rounded-xl text-xs">
+        ЗРОЗУМІЛО, ДО БОЮ
+      </button>
+    </div>
+  </div>
+
+  <!-- SUPPORT PROJECT MODAL -->
+  <div id="supportModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="c2-panel rounded-2xl max-w-md w-full p-5 border-amber-400/40">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-2.5">
+        <h2 class="font-bold text-base text-amber-300">🇺🇦 Підтримка сил ППО та проєкту</h2>
+        <button onclick="closeSupportModal()" class="c2-btn w-7 h-7 rounded-lg bg-slate-800 text-slate-300 font-bold">✕</button>
+      </div>
+      <p class="mt-3 text-xs text-slate-300 leading-relaxed">
+        <b>AEGIS VECTOR</b> створено як освітньо-тактичний симулятор роботи української протиповітряної оборони. У реальному житті небо України щодня тримають воїни Повітряних Сил та мобільних вогневих груп.
+      </p>
+      <div class="mt-3 bg-slate-900/90 border border-amber-500/30 rounded-xl p-3 text-xs space-y-1.5">
+        <div class="font-semibold text-amber-200">Рекомендовані перевірені фонди допомоги ЗСУ:</div>
+        <div class="text-slate-300">• Фонд «Повернись живим» (savelife.in.ua)</div>
+        <div class="text-slate-300">• UNITED24 — Напрям «Оборона» (u24.gov.ua)</div>
+        <div class="text-slate-300">• Фонд Сергія Притули (prytulafoundation.org)</div>
+      </div>
+      <button onclick="closeSupportModal()" class="c2-btn mt-4 w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2 rounded-xl text-xs">
+        ПОВЕРНУТИСЯ ДО КОМАНДНОГО ПУНКТУ
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * AEGIS VECTOR — TACTICAL 2D AIR-DEFENSE COMMAND SIMULATOR
+     * World Coordinate Space: 2600 x 1650 units (~1,316 km West-to-East)
+     * Scale Constant: 1 world unit = 0.50615 km
+     * ============================================================================
+     */
+
+    const WORLD_W = 2600;
+    const WORLD_H = 1650;
+    const KM_PER_UNIT = 0.672; // local equirectangular scale near 49.5°N; ≈ 1,305 km across Ukraine's mapped extent
+    const MAP_X_SCALE = 0.902; // correct the former longitude/latitude aspect distortion
+    const MAP_X_CENTER = WORLD_W / 2;
+    const WORLD_DISTANCE_SCALE = 0.50615 / KM_PER_UNIT;
+    function remapMapX(x) { return MAP_X_CENTER + (x - MAP_X_CENTER) * MAP_X_SCALE; }
+
+    // Geographic mapping calibration for realistic Lat/Lon display under cursor
+    // West border (~22.15°E) -> x = 230, East border (~40.22°E) -> x = 2380
+    // North border (~52.37°N) -> y = 175, South Crimea (~44.38°N) -> y = 1495
+    const MAP_WEST_X = remapMapX(230);
+    const MAP_EAST_X = remapMapX(2380);
+    function worldToLatLon(wx, wy) {
+      const lon = 22.15 + ((wx - MAP_WEST_X) / (MAP_EAST_X - MAP_WEST_X)) * (40.22 - 22.15);
+      const lat = 52.37 - ((wy - 175) / (1495 - 175)) * (52.37 - 44.38);
+      return { lat, lon };
+    }
+    function latLonToWorld(lon, lat) {
+      return {
+        x: MAP_WEST_X + ((lon - 22.15) / (40.22 - 22.15)) * (MAP_EAST_X - MAP_WEST_X),
+        y: 175 + ((52.37 - lat) / (52.37 - 44.38)) * (1495 - 175)
+      };
+    }
+
+    // Schematic local map grid only; it is NOT a geodetic MGRS conversion.
+    function formatMgrsLike(wx, wy) {
+      const easting = Math.max(0, Math.min(999, Math.round((wx / WORLD_W) * 999)));
+      const northing = Math.max(0, Math.min(999, Math.round(((WORLD_H - wy) / WORLD_H) * 999)));
+      return `X${String(easting).padStart(3, '0')} Y${String(northing).padStart(3, '0')}`;
+    }
+
+    // ============================================================================
+    // UKRAINE THEATER VECTOR POLYGONS (Mainland + Crimea + Dnipro River)
+    // ============================================================================
+    const UKRAINE_MAINLAND = [
+      [245, 435], [310, 320], [395, 255], [520, 235], [665, 240], [810, 230],
+      [960, 225], [1110, 200], [1240, 180], [1370, 210], [1485, 270], [1615, 315],
+      [1765, 355], [1935, 395], [2085, 455], [2235, 535], [2365, 625], [2380, 745],
+      [2315, 865], [2205, 965], [2050, 1025], [1895, 1065], [1745, 1110], [1615, 1155],
+      [1515, 1190], [1435, 1185], [1345, 1155], [1245, 1185], [1145, 1255], [1075, 1345],
+      [1015, 1365], [965, 1295], [975, 1205], [925, 1115], [820, 1045], [710, 995],
+      [605, 955], [515, 895], [415, 845], [315, 815], [235, 745], [215, 625], [230, 515]
+    ].map(([x, y]) => [remapMapX(x), y]);
+
+    const CRIMEA_POLYGON = [
+      [1485, 1215], [1565, 1215], [1665, 1265], [1775, 1295], [1815, 1345],
+      [1725, 1415], [1595, 1465], [1505, 1445], [1465, 1375], [1455, 1295], [1475, 1245]
+    ].map(([x, y]) => [remapMapX(x), y]);
+
+    const DNIPRO_RIVER = [
+      [30.5234,50.4501],[30.85,50.12],[31.25,49.82],[31.65,49.62],[32.06,49.4444],
+      [32.55,49.20],[33.42,49.07],[34.25,48.72],[35.0462,48.4647],[35.1396,47.8388],
+      [34.85,47.35],[33.95,46.95],[32.6169,46.6354]
+    ].map(([lon, lat]) => { const point = latLonToWorld(lon, lat); return [point.x, point.y]; });
+
+    // Point-in-Polygon ray-casting algorithm
+    function pointInPolygon(x, y, poly) {
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1];
+        const xj = poly[j][0], yj = poly[j][1];
+        const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    // Accurate oblast polygons are loaded from an ODbL OpenStreetMap-derived GeoJSON.
+    // The hand-drawn vectors remain only as an explicit offline fallback.
+    let UKRAINE_OBLASTS = [];
+    let mapDataMode = 'loading';
+    function isInsideUkraine(x, y) {
+      if (UKRAINE_OBLASTS.length) {
+        return UKRAINE_OBLASTS.some(feature => feature.polygons.some(poly => pointInPolygon(x, y, poly[0])));
+      }
+      return pointInPolygon(x, y, UKRAINE_MAINLAND) || pointInPolygon(x, y, CRIMEA_POLYGON);
+    }
+
+    async function loadUkraineGeoData() {
+      const status = document.getElementById('mapDataStatus');
+      try {
+        const url = 'https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson';
+        const response = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+        if (!response.ok) throw new Error(`GeoJSON HTTP ${response.status}`);
+        const data = await response.json();
+        if (!data || !Array.isArray(data.features)) throw new Error('Invalid GeoJSON FeatureCollection');
+        const parsed = [];
+        for (const feature of data.features) {
+          const geometry = feature && feature.geometry;
+          if (!geometry) continue;
+          const sourcePolygons = geometry.type === 'Polygon' ? [geometry.coordinates]
+            : geometry.type === 'MultiPolygon' ? geometry.coordinates : [];
+          const polygons = [];
+          let largestRing = null;
+          for (const sourcePolygon of sourcePolygons) {
+            const rings = sourcePolygon.map(ring => ring.map(pair => latLonToWorld(Number(pair[0]), Number(pair[1]))
+              ).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+              .map(point => [point.x, point.y]));
+            if (!rings[0] || rings[0].length < 4) continue;
+            polygons.push(rings);
+            if (!largestRing || rings[0].length > largestRing.length) largestRing = rings[0];
+          }
+          if (!polygons.length) continue;
+          const labelPoint = largestRing.reduce((acc, p) => ({x:acc.x+p[0], y:acc.y+p[1]}), {x:0,y:0});
+          labelPoint.x /= largestRing.length; labelPoint.y /= largestRing.length;
+          const rawName = feature.properties && (feature.properties.name || feature.properties.NAME || feature.properties.NAME_UA);
+          parsed.push({ name: String(rawName || ''), polygons, labelPoint });
+        }
+        if (parsed.length < 20) throw new Error(`Only ${parsed.length} oblast polygons found`);
+        UKRAINE_OBLASTS = parsed;
+        mapDataMode = 'osm';
+        if (status) status.textContent = `ГЕОДАНІ OSM • ${parsed.length} РЕГІОНІВ`;
+        if (status && status.nextElementSibling) status.nextElementSibling.hidden = false;
+        renderMainCanvas();
+        renderMinimap();
+      } catch (error) {
+        mapDataMode = 'fallback';
+        if (status) status.textContent = 'СХЕМА • OFFLINE / НЕМАЄ МЕРЕЖІ';
+        if (status && status.nextElementSibling) status.nextElementSibling.hidden = true;
+        console.warn('AEGIS VECTOR: геодані України не завантажено, використовується схема.', error);
+      }
+    }
+
+    // ============================================================================
+    // 8 STRATEGIC CITIES WITH REAL INFRASTRUCTURE EFFECTS
+    // ============================================================================
+    const INITIAL_CITIES = [
+      {
+        id: 'kyiv', name: 'Київ', x: 1185, y: 455, hp: 100, maxHp: 100,
+        role: 'Урядовий / Енерговузол',
+        effectDesc: '+$80 до бюджету щохвилі, поки вузол цілий',
+        isCapital: true
+      },
+      {
+        id: 'lviv', name: 'Львів', x: 435, y: 585, hp: 100, maxHp: 100,
+        role: 'Західний хаб ППО',
+        effectDesc: '+20% швидкості перезарядки ЗРК, поки цілий'
+      },
+      {
+        id: 'kharkiv', name: 'Харків', x: 1935, y: 545, hp: 100, maxHp: 100,
+        role: 'Східний промисловий форпост',
+        effectDesc: '+150 очок за оборону прифронтового вузла'
+      },
+      {
+        id: 'dnipro', name: 'Дніпро', x: 1625, y: 795, hp: 100, maxHp: 100,
+        role: 'Об’єкт ВПК та арсенал',
+        effectDesc: '-25% вартості поповнення БК та ремонту'
+      },
+      {
+        id: 'odesa', name: 'Одеса', x: 1165, y: 1155, hp: 100, maxHp: 100,
+        role: 'Морський порт / Логістика',
+        effectDesc: '+$120 ресурсів після кожної хвилі, поки порт цілий'
+      },
+      {
+        id: 'zaporizhzhia', name: 'Запоріжжя', x: 1665, y: 905, hp: 100, maxHp: 100,
+        role: 'ТЕЦ / Магістральна підстанція',
+        effectDesc: 'При знищенні радіус головного РЛС падає на 35%'
+      },
+      {
+        id: 'vinnytsia', name: 'Вінниця', x: 925, y: 695, hp: 100, maxHp: 100,
+        role: 'Командний центр зв’язку',
+        effectDesc: '+25% швидкості обертання головного радару'
+      },
+      {
+        id: 'mykolaiv', name: 'Миколаїв', x: 1295, y: 1085, hp: 100, maxHp: 100,
+        role: 'Південний оборонний вузол',
+        effectDesc: 'Прикриття південного коридору та верфей'
+      }
+    ];
+
+    // Strategic markers use verified city-centre coordinates, not the old hand-placed guesses.
+    const STRATEGIC_CITY_GEO = {
+      kyiv:[30.5234,50.4501], lviv:[24.0297,49.8397], kharkiv:[36.2304,49.9935],
+      dnipro:[35.0462,48.4647], odesa:[30.7233,46.4825], zaporizhzhia:[35.1396,47.8388],
+      vinnytsia:[28.4682,49.2331], mykolaiv:[31.9946,46.9750]
+    };
+    INITIAL_CITIES.forEach(city => {
+      const coords = STRATEGIC_CITY_GEO[city.id];
+      if (coords) { const point = latLonToWorld(coords[0], coords[1]); city.x = point.x; city.y = point.y; }
+    });
+
+    // Additional reference cities: geographic labels only, not gameplay targets.
+    const REFERENCE_CITIES = [
+      ['Луцьк',50.7472,25.3254],['Рівне',50.6199,26.2516],['Житомир',50.2547,28.6587],
+      ['Чернігів',51.4982,31.2893],['Суми',50.9077,34.7981],['Полтава',49.5883,34.5514],
+      ['Черкаси',49.4444,32.0598],['Кропивницький',48.5079,32.2623],['Тернопіль',49.5535,25.5948],
+      ['Хмельницький',49.4229,26.9871],['Івано-Франківськ',48.9226,24.7111],['Ужгород',48.6208,22.2879],
+      ['Чернівці',48.2915,25.9403],['Миколаїв',46.9750,31.9946],['Херсон',46.6354,32.6169],
+      ['Донецьк',48.0159,37.8029],['Луганськ',48.5740,39.3078]
+    ].map(([name, lat, lon]) => ({name, ...latLonToWorld(lon, lat)}));
+
+    // ============================================================================
+    // 5 TACTICAL AIR-DEFENSE ASSETS CATALOG
+    // ============================================================================
+    const UNIT_TYPES = {
+      acoustic: {
+        id: 'acoustic',
+        key: '1',
+        name: 'Акустичний датчик',
+        shortName: 'Акустика',
+        cost: 50,
+        range: 76, // legacy world units; converted below to corrected map scale
+        radarRange: 0,
+        acousticRange: 76,
+        emitsRadar: false,
+        maxAmmo: 0,
+        ammoCostPerUnit: 0,
+        reloadTime: 0,
+        cooldown: 999,
+        maxHp: 45,
+        canTarget: [],
+        icon: '📡',
+        color: '#38bdf8',
+        desc: 'Пасивне акустичне виявлення Shahed та БПЛА без випромінювання РЛС.'
+      },
+      mvg: {
+        id: 'mvg',
+        key: '2',
+        name: 'МВГ (Мобільна група)',
+        shortName: 'МВГ',
+        cost: 90,
+        range: 26, // legacy world units; converted below to corrected map scale
+        radarRange: 28,
+        acousticRange: 30,
+        emitsRadar: false,
+        maxAmmo: 30,
+        ammoCostPerUnit: 1, // $3 per 3-round burst
+        burstSize: 3,
+        reloadTime: 3.5,
+        cooldown: 0.42,
+        projectileSpeed: 540,
+        hitChance: { shahed: 0.68, lancet: 0.62, cruise: 0.12, arm: 0.05, ballistic: 0 },
+        damage: 34,
+        maxHp: 65,
+        canTarget: ['shahed', 'lancet', 'cruise'],
+        defaultDoctrine: 'all',
+        icon: '🛻',
+        color: '#34d399',
+        desc: 'Мобільний пікап із зенітним кулеметом та ПЗРК. Невидимий для ракет Х-31П.'
+      },
+      gepard: {
+        id: 'gepard',
+        key: '3',
+        name: 'Gepard 35mm',
+        shortName: 'Gepard',
+        cost: 160,
+        range: 36, // legacy world units; converted below to corrected map scale
+        radarRange: 46,
+        acousticRange: 32,
+        emitsRadar: true,
+        maxAmmo: 40,
+        ammoCostPerUnit: 2, // $8 per 4-round burst
+        burstSize: 4,
+        reloadTime: 4.0,
+        cooldown: 0.28,
+        projectileSpeed: 680,
+        hitChance: { shahed: 0.88, lancet: 0.85, cruise: 0.52, arm: 0.64, ballistic: 0 },
+        damage: 45,
+        maxHp: 110,
+        canTarget: ['shahed', 'lancet', 'cruise', 'arm'],
+        defaultDoctrine: 'all',
+        icon: '🚜',
+        color: '#2dd4bf',
+        desc: 'ЗСУ 35мм. Знищує рої Shahed та перехоплює протирадіолокаційні ракети Х-31П.'
+      },
+      irist: {
+        id: 'irist',
+        key: '4',
+        name: 'IRIS-T SLM',
+        shortName: 'IRIS-T',
+        cost: 360,
+        range: 92, // legacy world units; converted below to corrected map scale
+        radarRange: 115,
+        acousticRange: 35,
+        emitsRadar: true,
+        maxAmmo: 8,
+        ammoCostPerUnit: 55,
+        burstSize: 1,
+        reloadTime: 5.5,
+        cooldown: 1.35,
+        projectileSpeed: 760,
+        hitChance: { shahed: 0.96, lancet: 0.95, cruise: 0.91, arm: 0.84, ballistic: 0 },
+        damage: 140,
+        maxHp: 130,
+        canTarget: ['shahed', 'lancet', 'cruise', 'arm'],
+        defaultDoctrine: 'all',
+        icon: '🚀',
+        color: '#22d3ee',
+        desc: 'Високоточний ЗРК середньої дальності. Ідеальний проти крилатих ракет Х-101/Калібр.'
+      },
+      patriot: {
+        id: 'patriot',
+        key: '5',
+        name: 'Patriot PAC-3',
+        shortName: 'Patriot',
+        cost: 680,
+        range: 237, // legacy world units; converted below to corrected map scale
+        radarRange: 275,
+        acousticRange: 40,
+        emitsRadar: true,
+        maxAmmo: 6,
+        ammoCostPerUnit: 145,
+        burstSize: 1,
+        reloadTime: 7.0,
+        cooldown: 1.6,
+        projectileSpeed: 980,
+        hitChance: { shahed: 0.99, lancet: 0.99, cruise: 0.96, arm: 0.92, ballistic: 0.86 },
+        damage: 260,
+        maxHp: 160,
+        canTarget: ['shahed', 'lancet', 'cruise', 'arm', 'ballistic'],
+        defaultDoctrine: 'missiles_only', // Smart doctrine: saves $145 PAC-3 missiles for missiles unless overridden
+        icon: '🛡️',
+        color: '#60a5fa',
+        desc: 'Стратегічний ЗРК/ПРО (120 км). ЄДИНИЙ комплекс, здатний збивати балістику!'
+      }
+    };
+
+    // Convert legacy world-unit values to the corrected kilometre-per-unit projection.
+    Object.values(UNIT_TYPES).forEach(unit => {
+      for (const key of ['range','radarRange','acousticRange','projectileSpeed']) {
+        if (Number.isFinite(unit[key])) unit[key] *= WORLD_DISTANCE_SCALE;
+      }
+    });
+
+    // ============================================================================
+    // ENEMY THREAT SPECIFICATIONS
+    // ============================================================================
+    const ENEMY_TYPES = {
+      shahed: {
+        id: 'shahed',
+        name: 'БПЛА Shahed-136',
+        speed: 38,
+        hp: 55,
+        cityDamage: 14,
+        unitDamage: 18,
+        reward: 24,
+        color: '#f59e0b',
+        radius: 5,
+        isBallistic: false,
+        seadHuntSam: false,
+        seadRadiation: false
+      },
+      lancet: {
+        id: 'lancet',
+        name: 'БПЛА-мисливець SEAD',
+        speed: 48,
+        hp: 65,
+        cityDamage: 12,
+        unitDamage: 48,
+        reward: 38,
+        color: '#fb923c',
+        radius: 5.5,
+        isBallistic: false,
+        seadHuntSam: true,
+        seadRadiation: false
+      },
+      cruise: {
+        id: 'cruise',
+        name: 'КР Х-101 / Калібр',
+        speed: 96,
+        hp: 105,
+        cityDamage: 28,
+        unitDamage: 45,
+        reward: 68,
+        color: '#f43f5e',
+        radius: 6.5,
+        isBallistic: false,
+        seadHuntSam: false,
+        seadRadiation: false
+      },
+      arm: {
+        id: 'arm',
+        name: 'ПРР Х-31П (Антирадар)',
+        speed: 132,
+        hp: 90,
+        cityDamage: 10,
+        unitDamage: 85,
+        reward: 85,
+        color: '#e879f9',
+        radius: 6,
+        isBallistic: false,
+        seadHuntSam: false,
+        seadRadiation: true
+      },
+      ballistic: {
+        id: 'ballistic',
+        name: 'Балістика Іскандер-М',
+        speed: 215,
+        hp: 180,
+        cityDamage: 45,
+        unitDamage: 95,
+        reward: 145,
+        color: '#ef4444',
+        radius: 7.5,
+        isBallistic: true,
+        seadHuntSam: false,
+        seadRadiation: false
+      }
+    };
+
+    Object.values(ENEMY_TYPES).forEach(enemy => { enemy.speed *= WORLD_DISTANCE_SCALE; });
+
+    // Launch Corridors outside Ukrainian borders
+    const SPAWN_CORRIDORS = [
+      { id: 'north_by', label: 'ПІВНІЧ (БІЛОРУСЬ)', x: 980, y: 95 },
+      { id: 'northeast_kursk', label: 'ПН-СХІД (КУРЩИНА)', x: 1740, y: 185 },
+      { id: 'east_belgorod', label: 'СХІД (БЄЛГОРОД)', x: 2290, y: 410 },
+      { id: 'southeast_rostov', label: 'ПД-СХІД (ПРИАЗОВ’Я)', x: 2380, y: 890 },
+      { id: 'south_crimea', label: 'ПІВДЕНЬ (КРИМ)', x: 1680, y: 1525 },
+      { id: 'black_sea', label: 'ЧОРНЕ МОРЕ (ФЛОТ)', x: 1120, y: 1520 }
+    ].map(corridor => ({...corridor, x: remapMapX(corridor.x)}));
+
+    // ============================================================================
+    // SYNTHESIZED WEB AUDIO ENGINE (Zero external URLs)
+    // ============================================================================
+    class TacticalAudio {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+
+      unlock() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+      }
+
+      playTone(freq, type, duration, gainVal = 0.08, slideTo = null) {
+        if (this.muted) return;
+        this.unlock();
+        if (!this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, now);
+          if (slideTo) {
+            osc.frequency.exponentialRampToValueAtTime(slideTo, now + duration);
+          }
+          gain.gain.setValueAtTime(gainVal, now);
+          gain.gain.exponentialRampToValueAtTime(0.0008, now + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + duration);
+        } catch (e) {}
+      }
+
+      playRadarPing() {
+        this.playTone(1320, 'sine', 0.14, 0.018, 980);
+      }
+
+      playLockTarget() {
+        this.playTone(880, 'triangle', 0.07, 0.07);
+        setTimeout(() => this.playTone(1320, 'triangle', 0.11, 0.08), 65);
+      }
+
+      playAutocannon(isGepard) {
+        this.playTone(isGepard ? 155 : 220, 'sawtooth', 0.07, 0.055, 65);
+      }
+
+      playSamLaunch(isPatriot) {
+        this.playTone(isPatriot ? 280 : 360, 'sawtooth', 0.28, 0.065, isPatriot ? 95 : 140);
+      }
+
+      playExplosion(big = false) {
+        this.playTone(big ? 95 : 135, 'square', big ? 0.36 : 0.2, big ? 0.09 : 0.055, 28);
+      }
+
+      playBallisticKlaxon() {
+        this.playTone(580, 'sawtooth', 0.22, 0.085, 760);
+        setTimeout(() => this.playTone(580, 'sawtooth', 0.24, 0.085, 760), 260);
+      }
+
+      playUiClick() {
+        this.playTone(720, 'sine', 0.045, 0.04);
+      }
+    }
+
+    const audio = new TacticalAudio();
+
+    // ============================================================================
+    // GAME STATE
+    // ============================================================================
+    const state = {
+      money: 950,
+      score: 0,
+      totalDestroyed: 0,
+      wave: 1,
+      phase: 'prep', // 'prep' | 'combat' | 'gameover'
+      gameSpeed: 1,
+      prevSpeedBeforePause: 1,
+
+      // Radar Sweep
+      radarOrigin: { x: remapMapX(1265), y: 745 }, // Central Ukraine C2 Radar
+      radarAngle: 0,
+      lastPingQuadrant: -1,
+
+      // Entities
+      cities: JSON.parse(JSON.stringify(INITIAL_CITIES)),
+      units: [],
+      enemies: [],
+      projectiles: [],
+      particles: [],
+      floatingTexts: [],
+      combatLogs: [],
+
+      // Wave Spawner Queue
+      waveSpawnQueue: [],
+      waveTotalEnemies: 0,
+      waveSpawnedCount: 0,
+      waveCorridorsActive: [],
+      waveTimer: 0,
+
+      // Interaction & Camera
+      camera: {
+        x: WORLD_W / 2,
+        y: WORLD_H / 2,
+        zoom: 0.65,
+        minZoom: 0.45,
+        maxZoom: 2.8
+      },
+      placingUnitType: null,
+      selectedUnitId: null,
+      selectedCityId: null,
+      priorityEnemyId: null,
+
+      // Pointer & Touch State
+      pointer: {
+        screenX: 0,
+        screenY: 0,
+        worldX: 1300,
+        worldY: 825,
+        isDown: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        camStartX: 0,
+        camStartY: 0,
+        hasDragged: false,
+        pinchDist: 0
+      },
+
+      // Honest Telemetry Stats (Current Wave + Cumulative)
+      waveStats: {
+        shotsFired: 0,
+        hits: 0,
+        destroyed: 0,
+        leaked: 0,
+        totalTargets: 0
+      }
+    };
+
+    // ============================================================================
+    // CANVAS & HIGH-DPI SETUP
+    // ============================================================================
+    const canvas = document.getElementById('tacticalCanvas');
+    const ctx = canvas.getContext('2d');
+    const minimapCanvas = document.getElementById('minimapCanvas');
+    const mctx = minimapCanvas.getContext('2d');
+
+    let viewportW = window.innerWidth;
+    let viewportH = window.innerHeight;
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    // The map is fitted to the usable area between persistent UI zones.
+    // All pointer, render and minimap transforms use this same viewport geometry.
+    let cameraIsFitted = true;
+    function getCameraViewportMetrics() {
+      const landscapePhone = viewportW <= 900 && viewportH <= 520 && viewportW > viewportH;
+      const mobile = viewportW <= 760;
+      const top = landscapePhone ? 76 : (mobile ? 158 : 84);
+      const bottom = landscapePhone ? 92 : (mobile ? 158 : 142);
+      const left = 12;
+      const right = 12;
+      const width = Math.max(120, viewportW - left - right);
+      const height = Math.max(96, viewportH - top - bottom);
+      return { left, right: viewportW - right, top, bottom: viewportH - bottom, width, height,
+        centerX: left + width / 2, centerY: top + height / 2, landscapePhone, mobile };
+    }
+
+    function resizeCanvas() {
+      const oldW = viewportW, oldH = viewportH;
+      viewportW = document.documentElement.clientWidth || window.innerWidth;
+      viewportH = window.innerHeight || document.documentElement.clientHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(viewportW * dpr);
+      canvas.height = Math.floor(viewportH * dpr);
+      canvas.style.width = viewportW + 'px';
+      canvas.style.height = viewportH + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (cameraIsFitted || !oldW || !oldH) resetCameraFit();
+      else clampCamera();
+      updateScaleBarUI();
+    }
+
+    function resetCameraFit() {
+      const view = getCameraViewportMetrics();
+      const fitZoom = Math.min(view.width / (WORLD_W + 100), view.height / (WORLD_H + 100));
+      state.camera.zoom = Math.max(0.025, Math.min(1.15, fitZoom));
+      state.camera.minZoom = 0.025;
+      state.camera.x = WORLD_W / 2;
+      state.camera.y = WORLD_H / 2;
+      cameraIsFitted = true;
+      clampCamera();
+      updateScaleBarUI();
+    }
+
+    function clampCamera() {
+      const view = getCameraViewportMetrics();
+      const halfW = view.width / (2 * state.camera.zoom);
+      const halfH = view.height / (2 * state.camera.zoom);
+      // Keep at least 22% of the visible map span on-screen; when zoomed out,
+      // keep the entire theater visible rather than allowing it to disappear.
+      const keepX = Math.min(WORLD_W, view.width / state.camera.zoom) * 0.22;
+      const keepY = Math.min(WORLD_H, view.height / state.camera.zoom) * 0.22;
+      const minX = keepX - halfW, maxX = WORLD_W - keepX + halfW;
+      const minY = keepY - halfH, maxY = WORLD_H - keepY + halfH;
+      state.camera.x = minX <= maxX ? Math.max(minX, Math.min(maxX, state.camera.x)) : WORLD_W / 2;
+      state.camera.y = minY <= maxY ? Math.max(minY, Math.min(maxY, state.camera.y)) : WORLD_H / 2;
+    }
+
+    function screenToWorld(sx, sy) {
+      const view = getCameraViewportMetrics();
+      return {
+        x: (sx - view.centerX) / state.camera.zoom + state.camera.x,
+        y: (sy - view.centerY) / state.camera.zoom + state.camera.y
+      };
+    }
+
+    function worldToScreen(wx, wy) {
+      const view = getCameraViewportMetrics();
+      return {
+        x: (wx - state.camera.x) * state.camera.zoom + view.centerX,
+        y: (wy - state.camera.y) * state.camera.zoom + view.centerY
+      };
+    }
+
+    // ============================================================================
+    // DYNAMIC KILOMETRIC MAP SCALE BAR & ZOOM HUD
+    // ============================================================================
+    function updateScaleBarUI() {
+      const zoom = state.camera.zoom;
+      const pxPerKm = zoom / KM_PER_UNIT; // screen pixels per 1 km
+
+      // Candidate clean tactical step sizes in km
+      const steps = [10, 20, 25, 40, 50, 75, 100, 150, 200, 250, 300];
+      let bestStep = 100;
+      let bestDiff = Infinity;
+
+      for (const s of steps) {
+        const pxWidth = s * pxPerKm;
+        if (pxWidth >= 95 && pxWidth <= 205) {
+          const diff = Math.abs(pxWidth - 142);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestStep = s;
+          }
+        }
+      }
+
+      const finalPxWidth = Math.round(bestStep * pxPerKm);
+      const barEl = document.getElementById('scaleBarGraphic');
+      const midEl = document.getElementById('scaleMidLabel');
+      const maxEl = document.getElementById('scaleMaxLabel');
+      const zoomEl = document.getElementById('hudZoomLevel');
+
+      if (barEl) barEl.style.width = `${finalPxWidth}px`;
+      if (midEl) midEl.textContent = `${bestStep / 2}`;
+      if (maxEl) maxEl.textContent = `${bestStep} км`;
+      if (zoomEl) zoomEl.textContent = `${zoom.toFixed(2)}x`;
+    }
+
+    function zoomByFactor(factor, anchorScreenX = null, anchorScreenY = null) {
+      const view = getCameraViewportMetrics();
+      if (anchorScreenX == null) anchorScreenX = view.centerX;
+      if (anchorScreenY == null) anchorScreenY = view.centerY;
+      cameraIsFitted = false;
+      const before = screenToWorld(anchorScreenX, anchorScreenY);
+      const newZoom = Math.max(state.camera.minZoom, Math.min(state.camera.maxZoom, state.camera.zoom * factor));
+      state.camera.zoom = newZoom;
+      const after = screenToWorld(anchorScreenX, anchorScreenY);
+      state.camera.x += (before.x - after.x);
+      state.camera.y += (before.y - after.y);
+      clampCamera();
+      updateScaleBarUI();
+    }
+
+    // ============================================================================
+    // STRATEGIC CITY BONUSES & INFRASTRUCTURE INTEGRITY HELPERS
+    // ============================================================================
+    function isCityOperational(id) {
+      const c = state.cities.find(city => city.id === id);
+      return c && c.hp > 25;
+    }
+
+    function getOverallInfraPercent() {
+      const totalHp = state.cities.reduce((acc, c) => acc + c.hp, 0);
+      const totalMax = state.cities.reduce((acc, c) => acc + c.maxHp, 0);
+      return Math.round((totalHp / totalMax) * 100);
+    }
+
+    function getDiscountMultiplier() {
+      // Dnipro intact => 25% discount on ammo & repairs
+      return isCityOperational('dnipro') ? 0.75 : 1.0;
+    }
+
+    function getReloadSpeedMultiplier() {
+      // Lviv intact => +20% reload speed
+      return isCityOperational('lviv') ? 1.2 : 1.0;
+    }
+
+    function getMainRadarRadius() {
+      // Base 1050 units (~531 km); Zaporizhzhia destroyed => -35% radar radius
+      const base = 1050 * WORLD_DISTANCE_SCALE;
+      return isCityOperational('zaporizhzhia') ? base : base * 0.65;
+    }
+
+    function getRadarRotationSpeed() {
+      // Full 2*PI rotation in 4.2s (~1.496 rad/s); Vinnytsia intact => +25% faster sweep
+      const base = (Math.PI * 2) / 4.2;
+      return isCityOperational('vinnytsia') ? base * 1.25 : base;
+    }
+
+    // ============================================================================
+    // LOGGING & FLOATING TEXT FEEDBACK
+    // ============================================================================
+    function addCombatLog(msg, tone = 'info') {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      state.combatLogs.unshift({ time: timeStr, msg, tone });
+      if (state.combatLogs.length > 4) state.combatLogs.pop();
+      renderCombatLog();
+    }
+
+    function renderCombatLog() {
+      const box = document.getElementById('combatLogBox');
+      if (!box) return;
+      box.innerHTML = state.combatLogs.map(entry => {
+        const colorClass = entry.tone === 'danger' ? 'text-red-300 border-red-500/40 bg-red-950/75'
+          : entry.tone === 'success' ? 'text-emerald-300 border-emerald-500/35 bg-slate-950/80'
+          : 'text-cyan-200 border-cyan-500/30 bg-slate-950/80';
+        return `<div class="px-2 py-0.5 rounded border text-[10px] font-mono-tech truncate ${colorClass}">
+          <span class="opacity-60">[${entry.time}]</span> ${entry.msg}
+        </div>`;
+      }).join('');
+    }
+
+    function spawnFloatingText(x, y, text, color = '#22d3ee') {
+      state.floatingTexts.push({ x, y, text, color, life: 1.25, maxLife: 1.25 });
+    }
+
+    function spawnExplosion(x, y, color = '#f59e0b', count = 14) {
+      for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 25 + Math.random() * 110;
+        state.particles.push({
+          x, y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          life: 0.45 + Math.random() * 0.35,
+          maxLife: 0.8,
+          color,
+          size: 1.8 + Math.random() * 2.5
+        });
+      }
+    }
+
+    // ============================================================================
+    // WAVE GENERATOR & ESCALATION
+    // ============================================================================
+    function buildWaveQueue(waveNum) {
+      const queue = [];
+      // Select active threat corridors for this wave
+      const numCorridors = Math.min(SPAWN_CORRIDORS.length, 2 + Math.floor((waveNum + 1) / 2));
+      const shuffled = [...SPAWN_CORRIDORS];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const activeCorridors = shuffled.slice(0, numCorridors);
+      state.waveCorridorsActive = activeCorridors;
+
+      let timeCursor = 0.8;
+      const pickCorridor = () => activeCorridors[Math.floor(Math.random() * activeCorridors.length)];
+      const pickTargetCity = () => {
+        const alive = state.cities.filter(c => c.hp > 0);
+        const pool = alive.length > 0 ? alive : state.cities;
+        // Weight slightly toward capital & high-value nodes
+        return pool[Math.floor(Math.random() * pool.length)];
+      };
+
+      // 1. Shahed-136 swarms (present in all waves)
+      const shahedCount = 4 + waveNum * 2;
+      for (let i = 0; i < shahedCount; i++) {
+        queue.push({
+          delay: timeCursor,
+          type: 'shahed',
+          corridor: pickCorridor(),
+          targetCity: pickTargetCity()
+        });
+        timeCursor += Math.max(0.75, 1.9 - waveNum * 0.12);
+      }
+
+      // 2. Lancet / Geran-SEAD hunters (from Wave 2+)
+      if (waveNum >= 2) {
+        const lancetCount = Math.floor(waveNum * 1.1);
+        for (let i = 0; i < lancetCount; i++) {
+          queue.push({
+            delay: 2.5 + i * 3.2,
+            type: 'lancet',
+            corridor: pickCorridor(),
+            targetCity: pickTargetCity()
+          });
+        }
+      }
+
+      // 3. Kh-101 / Kalibr Cruise Missiles (from Wave 2+)
+      if (waveNum >= 2) {
+        const cruiseCount = 1 + Math.floor(waveNum * 1.2);
+        for (let i = 0; i < cruiseCount; i++) {
+          queue.push({
+            delay: 4.5 + i * 3.8,
+            type: 'cruise',
+            corridor: pickCorridor(),
+            targetCity: pickTargetCity()
+          });
+        }
+      }
+
+      // 4. Kh-31P Anti-Radiation Missiles (from Wave 3+)
+      if (waveNum >= 3) {
+        const armCount = Math.floor((waveNum - 1) * 0.9);
+        for (let i = 0; i < armCount; i++) {
+          queue.push({
+            delay: 6.0 + i * 4.5,
+            type: 'arm',
+            corridor: pickCorridor(),
+            targetCity: pickTargetCity()
+          });
+        }
+      }
+
+      // 5. Iskander-M / Kinzhal Ballistic Missiles (from Wave 3+, or late Wave 2 warning)
+      if (waveNum >= 3) {
+        const ballisticCount = Math.max(1, Math.floor((waveNum - 2) * 0.85));
+        for (let i = 0; i < ballisticCount; i++) {
+          queue.push({
+            delay: 8.5 + i * 6.5,
+            type: 'ballistic',
+            corridor: pickCorridor(),
+            targetCity: pickTargetCity()
+          });
+        }
+      }
+
+      queue.sort((a, b) => a.delay - b.delay);
+      return queue;
+    }
+
+    function startNextWaveNow() {
+      if (state.phase !== 'prep') return;
+      audio.unlock();
+      audio.playUiClick();
+
+      state.phase = 'combat';
+      state.waveTimer = 0;
+      state.waveSpawnQueue = buildWaveQueue(state.wave);
+      state.waveTotalEnemies = state.waveSpawnQueue.length;
+      state.waveSpawnedCount = 0;
+
+      state.waveStats = {
+        shotsFired: 0,
+        hits: 0,
+        destroyed: 0,
+        leaked: 0,
+        totalTargets: state.waveTotalEnemies
+      };
+
+      if (state.gameSpeed === 0) setGameSpeed(1);
+      addCombatLog(`Хвиля ${state.wave}: зафіксовано ${state.waveTotalEnemies} повітряних цілей!`, 'danger');
+      updateHudUI();
+    }
+
+    function spawnEnemyFromSpec(spec) {
+      const def = ENEMY_TYPES[spec.type];
+      const jitterX = (Math.random() - 0.5) * 90 * WORLD_DISTANCE_SCALE;
+      const jitterY = (Math.random() - 0.5) * 90 * WORLD_DISTANCE_SCALE;
+      const startX = spec.corridor.x + jitterX;
+      const startY = spec.corridor.y + jitterY;
+
+      // Create dogleg waypoints for Shaheds & Cruise missiles so routes feel tactical
+      const waypoints = [];
+      if (!def.isBallistic && Math.random() < 0.72) {
+        const midX = (startX + spec.targetCity.x) * 0.5 + (Math.random() - 0.5) * 280 * WORLD_DISTANCE_SCALE;
+        const midY = (startY + spec.targetCity.y) * 0.5 + (Math.random() - 0.5) * 220 * WORLD_DISTANCE_SCALE;
+        waypoints.push({ x: midX, y: midY });
+      }
+      waypoints.push({ x: spec.targetCity.x, y: spec.targetCity.y });
+
+      const enemy = {
+        uid: 'e_' + Math.random().toString(36).slice(2, 9),
+        type: spec.type,
+        name: def.name,
+        x: startX,
+        y: startY,
+        vx: 0,
+        vy: 0,
+        speed: def.speed * (1 + (state.wave - 1) * 0.03),
+        hp: def.hp,
+        maxHp: def.hp,
+        cityDamage: def.cityDamage,
+        unitDamage: def.unitDamage,
+        reward: def.reward,
+        color: def.color,
+        radius: def.radius,
+        isBallistic: def.isBallistic,
+        seadHuntSam: def.seadHuntSam,
+        seadRadiation: def.seadRadiation,
+        waypoints,
+        targetCityId: spec.targetCity.id,
+        lockedUnitId: null,
+
+        // Radar detection state
+        detectedAlpha: def.isBallistic ? 1.0 : 0.0, // Ballistic launches are detected by early-warning satellites
+        ghostX: startX,
+        ghostY: startY,
+        ghostVx: 0,
+        ghostVy: 0,
+        trail: []
+      };
+
+      state.enemies.push(enemy);
+
+      if (def.isBallistic) {
+        audio.playBallisticKlaxon();
+        addCombatLog(`⚠️ ПУСК БАЛІСТИКИ (${spec.corridor.label})!`, 'danger');
+      } else if (def.seadRadiation) {
+        addCombatLog(`⚠️ Зафіксовано ПРР Х-31П! Перевірте EMCON!`, 'danger');
+      }
+    }
+
+    // ============================================================================
+    // UNIT PLACEMENT, INSPECTOR & ECONOMY ACTIONS
+    // ============================================================================
+    function selectUnitToPlace(typeId) {
+      audio.unlock();
+      audio.playUiClick();
+      const def = UNIT_TYPES[typeId];
+      if (!def) return;
+
+      if (state.placingUnitType === typeId) {
+        cancelPlacement();
+        return;
+      }
+
+      if (state.money < def.cost) {
+        spawnFloatingText(state.pointer.worldX, state.pointer.worldY, `Недостатньо коштів ($${def.cost})`, '#ef4444');
+        addCombatLog(`Не вистачає бюджету для ${def.shortName} ($${def.cost})`, 'danger');
+        return;
+      }
+
+      state.placingUnitType = typeId;
+      state.selectedUnitId = null;
+      state.selectedCityId = null;
+      closeInspector();
+
+      document.getElementById('placementBar').classList.remove('hidden');
+      document.getElementById('placementHintText').textContent =
+        `Розгортання: ${def.name} ($${def.cost} • ${(def.range * KM_PER_UNIT).toFixed(1)} км)`;
+      renderUnitDock();
+    }
+
+    function cancelPlacement() {
+      state.placingUnitType = null;
+      document.getElementById('placementBar').classList.add('hidden');
+      renderUnitDock();
+    }
+
+    function tryPlaceUnitAt(wx, wy, keepPlacement = false) {
+      const typeId = state.placingUnitType;
+      if (!typeId) return false;
+      const def = UNIT_TYPES[typeId];
+      if (!def) return false;
+
+      if (state.money < def.cost) {
+        spawnFloatingText(wx, wy, 'Недостатньо коштів!', '#ef4444');
+        return false;
+      }
+
+      if (!isInsideUkraine(wx, wy)) {
+        spawnFloatingText(wx, wy, 'Тільки в межах України!', '#ef4444');
+        audio.playTone(180, 'sawtooth', 0.14, 0.06);
+        return false;
+      }
+
+      // Prevent stacking directly on top of another unit (< 16 units apart)
+      const tooClose = state.units.some(u => Math.hypot(u.x - wx, u.y - wy) < 16 * WORLD_DISTANCE_SCALE);
+      if (tooClose) {
+        spawnFloatingText(wx, wy, 'Позиція вже зайнята!', '#f59e0b');
+        return false;
+      }
+
+      state.money -= def.cost;
+      const newUnit = {
+        uid: 'u_' + Math.random().toString(36).slice(2, 9),
+        type: typeId,
+        name: def.name,
+        shortName: def.shortName,
+        x: wx,
+        y: wy,
+        hp: def.maxHp,
+        maxHp: def.maxHp,
+        ammo: def.maxAmmo,
+        maxAmmo: def.maxAmmo,
+        reloadingTimer: 0,
+        cooldownTimer: 0,
+        emcon: false, // Radio silence mode
+        doctrine: def.defaultDoctrine || 'all', // 'all' | 'missiles_only'
+        kills: 0,
+        totalInvested: def.cost
+      };
+
+      state.units.push(newUnit);
+      audio.playTone(520, 'triangle', 0.12, 0.07, 780);
+      spawnFloatingText(wx, wy - 14, `-${def.cost}$ • ${def.shortName}`, '#34d399');
+      addCombatLog(`Розгорнуто: ${def.name} (${(def.range * KM_PER_UNIT).toFixed(1)} км)`, 'success');
+
+      // Hold Shift on desktop to place several identical units in sequence.
+      if (keepPlacement && state.money >= def.cost) {
+        renderUnitDock();
+      } else {
+        cancelPlacement();
+      }
+      updateHudUI();
+      return true;
+    }
+
+    function openUnitInspector(unitId) {
+      const unit = state.units.find(u => u.uid === unitId);
+      if (!unit) return;
+      state.selectedUnitId = unitId;
+      state.selectedCityId = null;
+
+      const def = UNIT_TYPES[unit.type];
+      const panel = document.getElementById('inspectorPanel');
+      panel.classList.remove('hidden');
+
+      document.getElementById('inspBadge').textContent = unit.type === 'acoustic' ? 'ДАТЧИК' : 'ППО / ЗРК';
+      document.getElementById('inspTitle').textContent = unit.name;
+      const rangeKm = (def.range * KM_PER_UNIT).toFixed(1);
+      document.getElementById('inspSubtitle').textContent = `Радіус: ${rangeKm} км • Знищено цілей: ${unit.kills}`;
+
+      const discount = getDiscountMultiplier();
+      const missingAmmo = unit.maxAmmo - unit.ammo;
+      const reloadCost = Math.ceil(missingAmmo * def.ammoCostPerUnit * discount);
+      const missingHp = unit.maxHp - unit.hp;
+      const repairCost = Math.ceil(missingHp * 0.85 * discount);
+      const refundAmount = Math.floor(unit.totalInvested * 0.7);
+
+      let html = `
+        <!-- HP Bar -->
+        <div>
+          <div class="flex justify-between text-[11px] font-mono-tech mb-1">
+            <span class="text-slate-400">Боєздатність (HP)</span>
+            <span class="${unit.hp < unit.maxHp * 0.4 ? 'text-red-400' : 'text-emerald-400'}">${Math.ceil(unit.hp)} / ${unit.maxHp}</span>
+          </div>
+          <div class="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+            <div class="h-full ${unit.hp < unit.maxHp * 0.4 ? 'bg-red-500' : 'bg-emerald-400'}" style="width: ${(unit.hp / unit.maxHp) * 100}%"></div>
+          </div>
+        </div>
+      `;
+
+      if (unit.maxAmmo > 0) {
+        html += `
+          <!-- Ammo Bar -->
+          <div>
+            <div class="flex justify-between text-[11px] font-mono-tech mb-1">
+              <span class="text-slate-400">${def.burstSize > 1 ? 'Боєкомплект (черги)' : 'Боєкомплект (БК)'}</span>
+              <span class="text-cyan-300">${unit.ammo} / ${unit.maxAmmo} ${unit.reloadingTimer > 0 ? '(Перезарядка...)' : ''}</span>
+            </div>
+            <div class="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+              <div class="h-full bg-cyan-400" style="width: ${(unit.ammo / unit.maxAmmo) * 100}%"></div>
+            </div>
+          </div>
+
+          <!-- Reload & Repair Buttons -->
+          <div class="grid grid-cols-2 gap-1.5">
+            <button onclick="reloadSelectedUnit()" ${missingAmmo === 0 || state.money < reloadCost ? 'disabled' : ''}
+              class="c2-btn py-1.5 px-2 rounded-xl font-mono-tech text-[11px] font-semibold border
+              ${missingAmmo === 0 || state.money < reloadCost
+                ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
+                : 'bg-cyan-500/20 hover:bg-cyan-500/30 border-cyan-400/50 text-cyan-200'}">
+              🔄 БК ($${reloadCost})
+            </button>
+            <button onclick="repairSelectedUnit()" ${missingHp <= 0 || state.money < repairCost ? 'disabled' : ''}
+              class="c2-btn py-1.5 px-2 rounded-xl font-mono-tech text-[11px] font-semibold border
+              ${missingHp <= 0 || state.money < repairCost
+                ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
+                : 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/50 text-emerald-200'}">
+              🔧 Ремонт ($${repairCost})
+            </button>
+          </div>
+        `;
+      } else {
+        html += `
+          <button onclick="repairSelectedUnit()" ${missingHp <= 0 || state.money < repairCost ? 'disabled' : ''}
+            class="c2-btn w-full py-1.5 px-2 rounded-xl font-mono-tech text-[11px] font-semibold border
+            ${missingHp <= 0 || state.money < repairCost
+              ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
+              : 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/50 text-emerald-200'}">
+            🔧 Ремонт датчика ($${repairCost})
+          </button>
+        `;
+      }
+
+      // Active Radar EMCON Toggle (for radar-emitting units)
+      if (def.emitsRadar) {
+        html += `
+          <button onclick="toggleSelectedUnitEmcon()"
+            class="c2-btn w-full py-1.5 px-2.5 rounded-xl font-mono-tech text-[11px] font-semibold border flex items-center justify-between
+            ${unit.emcon
+              ? 'bg-amber-500/25 border-amber-400 text-amber-200'
+              : 'bg-slate-900/90 border-slate-700 text-slate-300 hover:border-cyan-400/50'}">
+            <span>📡 Радіотиша (EMCON) [E]</span>
+            <span>${unit.emcon ? 'УВІМКНЕНО' : 'ВИМК (РЛС АКТИВНА)'}</span>
+          </button>
+        `;
+      }
+
+      // Target Doctrine Toggle (for SAMs)
+      if (unit.maxAmmo > 0) {
+        html += `
+          <button onclick="toggleSelectedUnitDoctrine()"
+            class="c2-btn w-full py-1.5 px-2.5 rounded-xl font-mono-tech text-[11px] font-semibold border flex items-center justify-between bg-slate-900/90 border-slate-700 text-slate-300 hover:border-cyan-400/50">
+            <span>🎯 Доктрина:</span>
+            <span class="text-cyan-300">${unit.doctrine === 'missiles_only' ? 'Тільки ракети (Економ)' : 'Вогонь по всіх цілях'}</span>
+          </button>
+        `;
+      }
+
+      // Dismantle / Refund button
+      html += `
+        <button onclick="dismantleSelectedUnit()"
+          class="c2-btn w-full py-1.5 px-2.5 rounded-xl font-mono-tech text-[11px] font-semibold bg-red-950/50 hover:bg-red-900/60 border border-red-500/40 text-red-300 mt-1">
+          🗑 Демонтаж (+$${refundAmount} / 70%)
+        </button>
+      `;
+
+      document.getElementById('inspectorBody').innerHTML = html;
+    }
+
+    function openCityInspector(cityId) {
+      const city = state.cities.find(c => c.id === cityId);
+      if (!city) return;
+      state.selectedCityId = cityId;
+      state.selectedUnitId = null;
+
+      const panel = document.getElementById('inspectorPanel');
+      panel.classList.remove('hidden');
+
+      const operational = city.hp > 25;
+      document.getElementById('inspBadge').textContent = operational ? 'АКТИВНИЙ ВУЗОЛ' : 'ПОШКОДЖЕНО';
+      document.getElementById('inspTitle').textContent = city.name;
+      document.getElementById('inspSubtitle').textContent = city.role;
+
+      const missingHp = city.maxHp - city.hp;
+      const discount = getDiscountMultiplier();
+      const repairCost = Math.ceil(missingHp * 2.2 * discount);
+
+      document.getElementById('inspectorBody').innerHTML = `
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 text-[11px] text-slate-300">
+          <div class="text-cyan-300 font-semibold mb-0.5">Стратегічний ефект:</div>
+          <div>${city.effectDesc}</div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[11px] font-mono-tech mb-1">
+            <span class="text-slate-400">Стан інфраструктури</span>
+            <span class="${operational ? 'text-emerald-400' : 'text-red-400'}">${Math.ceil(city.hp)}%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+            <div class="h-full ${operational ? 'bg-emerald-400' : 'bg-red-500'}" style="width: ${city.hp}%"></div>
+          </div>
+        </div>
+        <button onclick="repairSelectedCity()" ${missingHp <= 0 || state.money < repairCost ? 'disabled' : ''}
+          class="c2-btn w-full py-2 px-3 rounded-xl font-mono-tech text-[11px] font-semibold border
+          ${missingHp <= 0 || state.money < repairCost
+            ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
+            : 'bg-emerald-500/20 hover:bg-emerald-500/35 border-emerald-400/50 text-emerald-200'}">
+          🏗️ Відновити інфраструктуру ($${repairCost})
+        </button>
+      `;
+    }
+
+    function closeInspector() {
+      state.selectedUnitId = null;
+      state.selectedCityId = null;
+      document.getElementById('inspectorPanel').classList.add('hidden');
+    }
+
+    function reloadSelectedUnit() {
+      const unit = state.units.find(u => u.uid === state.selectedUnitId);
+      if (!unit) return;
+      const def = UNIT_TYPES[unit.type];
+      const missing = unit.maxAmmo - unit.ammo;
+      if (missing <= 0) return;
+      const cost = Math.ceil(missing * def.ammoCostPerUnit * getDiscountMultiplier());
+      if (state.money < cost) return;
+
+      state.money -= cost;
+      unit.ammo = unit.maxAmmo;
+      unit.reloadingTimer = 0;
+      audio.playTone(640, 'triangle', 0.12, 0.06, 920);
+      spawnFloatingText(unit.x, unit.y - 14, `БК поповнено (-$${cost})`, '#22d3ee');
+      openUnitInspector(unit.uid);
+      updateHudUI();
+    }
+
+    function repairSelectedUnit() {
+      const unit = state.units.find(u => u.uid === state.selectedUnitId);
+      if (!unit) return;
+      const missing = unit.maxHp - unit.hp;
+      if (missing <= 0) return;
+      const cost = Math.ceil(missing * 0.85 * getDiscountMultiplier());
+      if (state.money < cost) return;
+
+      state.money -= cost;
+      unit.hp = unit.maxHp;
+      audio.playTone(540, 'sine', 0.14, 0.06, 820);
+      spawnFloatingText(unit.x, unit.y - 14, `Відремонтовано (-$${cost})`, '#34d399');
+      openUnitInspector(unit.uid);
+      updateHudUI();
+    }
+
+    function toggleSelectedUnitEmcon() {
+      const unit = state.units.find(u => u.uid === state.selectedUnitId);
+      if (!unit) return;
+      const def = UNIT_TYPES[unit.type];
+      if (!def.emitsRadar) return;
+      unit.emcon = !unit.emcon;
+      audio.playUiClick();
+      spawnFloatingText(unit.x, unit.y - 14, unit.emcon ? 'EMCON: РАДІОТИША' : 'РЛС АКТИВНА', '#fbbf24');
+      openUnitInspector(unit.uid);
+    }
+
+    function toggleSelectedUnitDoctrine() {
+      const unit = state.units.find(u => u.uid === state.selectedUnitId);
+      if (!unit || unit.maxAmmo <= 0) return;
+      unit.doctrine = unit.doctrine === 'missiles_only' ? 'all' : 'missiles_only';
+      audio.playUiClick();
+      openUnitInspector(unit.uid);
+    }
+
+    function dismantleSelectedUnit() {
+      const idx = state.units.findIndex(u => u.uid === state.selectedUnitId);
+      if (idx === -1) return;
+      const unit = state.units[idx];
+      const refund = Math.floor(unit.totalInvested * 0.7);
+      state.money += refund;
+      state.units.splice(idx, 1);
+      audio.playTone(320, 'triangle', 0.14, 0.06, 210);
+      spawnFloatingText(unit.x, unit.y - 12, `+$${refund}`, '#fbbf24');
+      addCombatLog(`Демонтовано ${unit.shortName} (+$${refund})`, 'info');
+      closeInspector();
+      updateHudUI();
+    }
+
+    function repairSelectedCity() {
+      const city = state.cities.find(c => c.id === state.selectedCityId);
+      if (!city) return;
+      const missing = city.maxHp - city.hp;
+      if (missing <= 0) return;
+      const cost = Math.ceil(missing * 2.2 * getDiscountMultiplier());
+      if (state.money < cost) return;
+
+      state.money -= cost;
+      city.hp = city.maxHp;
+      audio.playTone(580, 'sine', 0.16, 0.06, 880);
+      spawnFloatingText(city.x, city.y - 16, `${city.name} відновлено!`, '#34d399');
+      addCombatLog(`Інфраструктуру м. ${city.name} повністю відновлено`, 'success');
+      openCityInspector(city.id);
+      updateHudUI();
+    }
+
+    // ============================================================================
+    // SIMULATION UPDATE LOOP
+    // ============================================================================
+    function updateSimulation(dt) {
+      if (state.gameSpeed === 0 || state.phase === 'gameover') return;
+      const simDt = dt * state.gameSpeed;
+
+      // 1. Rotate Main C2 Radar Sweep
+      const rotSpeed = getRadarRotationSpeed();
+      state.radarAngle = (state.radarAngle + rotSpeed * simDt) % (Math.PI * 2);
+      const quad = Math.floor((state.radarAngle / (Math.PI * 2)) * 4);
+      if (quad !== state.lastPingQuadrant) {
+        state.lastPingQuadrant = quad;
+        if (state.phase === 'combat') audio.playRadarPing();
+      }
+
+      // 2. Spawn Wave Queue
+      if (state.phase === 'combat') {
+        state.waveTimer += simDt;
+        while (state.waveSpawnQueue.length > 0 && state.waveSpawnQueue[0].delay <= state.waveTimer) {
+          const spec = state.waveSpawnQueue.shift();
+          spawnEnemyFromSpec(spec);
+          state.waveSpawnedCount++;
+        }
+      }
+
+      // 3. Update Enemies Movement, Detection & Impacts
+      const mainRadarRange = getMainRadarRadius();
+      let hasBallisticAirborne = false;
+
+      for (let i = state.enemies.length - 1; i >= 0; i--) {
+        const e = state.enemies[i];
+        if (e.isBallistic) hasBallisticAirborne = true;
+
+        // Determine Steering Target (City vs SEAD SAM hunt)
+        let destX = e.waypoints[0].x;
+        let destY = e.waypoints[0].y;
+
+        if (e.seadRadiation) {
+          // Kh-31P homes in on the nearest active emitting radar unit!
+          let nearestRadar = null;
+          let bestDist = 650 * WORLD_DISTANCE_SCALE;
+          for (const u of state.units) {
+            const uDef = UNIT_TYPES[u.type];
+            if (uDef.emitsRadar && !u.emcon) {
+              const d = Math.hypot(u.x - e.x, u.y - e.y);
+              if (d < bestDist) {
+                bestDist = d;
+                nearestRadar = u;
+              }
+            }
+          }
+          if (nearestRadar) {
+            destX = nearestRadar.x;
+            destY = nearestRadar.y;
+            e.lockedUnitId = nearestRadar.uid;
+          } else {
+            e.lockedUnitId = null;
+          }
+        } else if (e.seadHuntSam) {
+          // Lancet / Geran-SEAD hunts nearest SAM/sensor within 320 units
+          let nearestSam = null;
+          let bestDist = 340 * WORLD_DISTANCE_SCALE;
+          for (const u of state.units) {
+            const d = Math.hypot(u.x - e.x, u.y - e.y);
+            if (d < bestDist) {
+              bestDist = d;
+              nearestSam = u;
+            }
+          }
+          if (nearestSam) {
+            destX = nearestSam.x;
+            destY = nearestSam.y;
+            e.lockedUnitId = nearestSam.uid;
+          } else {
+            e.lockedUnitId = null;
+          }
+        }
+
+        const dx = destX - e.x;
+        const dy = destY - e.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 1) {
+          e.vx = (dx / dist) * e.speed;
+          e.vy = (dy / dist) * e.speed;
+          e.x += e.vx * simDt;
+          e.y += e.vy * simDt;
+        }
+
+        // Trail history
+        if (Math.random() < 0.45) {
+          e.trail.push({ x: e.x, y: e.y });
+          if (e.trail.length > 14) e.trail.shift();
+        }
+
+        // Radar & Acoustic Detection Check
+        let continuouslyTracked = e.isBallistic;
+        for (const u of state.units) {
+          const uDef = UNIT_TYPES[u.type];
+          const d = Math.hypot(u.x - e.x, u.y - e.y);
+          // Active unit radar
+          if (uDef.emitsRadar && !u.emcon && d <= uDef.radarRange) {
+            continuouslyTracked = true;
+            break;
+          }
+          // Passive acoustic detection (detects low-flying drones & cruise missiles)
+          if (!e.isBallistic && !e.seadRadiation && uDef.acousticRange > 0 && d <= uDef.acousticRange) {
+            continuouslyTracked = true;
+            break;
+          }
+        }
+
+        // Check Main C2 Radar Sweep Beam Intersection
+        const rdx = e.x - state.radarOrigin.x;
+        const rdy = e.y - state.radarOrigin.y;
+        const rDist = Math.hypot(rdx, rdy);
+        if (rDist <= mainRadarRange) {
+          let angleToEnemy = Math.atan2(rdy, rdx);
+          if (angleToEnemy < 0) angleToEnemy += Math.PI * 2;
+          let angleDiff = Math.abs(angleToEnemy - state.radarAngle);
+          if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+          if (angleDiff < 0.14) {
+            continuouslyTracked = true;
+          }
+        }
+
+        if (continuouslyTracked) {
+          e.detectedAlpha = 1.0;
+          e.ghostX = e.x;
+          e.ghostY = e.y;
+          e.ghostVx = e.vx;
+          e.ghostVy = e.vy;
+        } else {
+          e.detectedAlpha = Math.max(0.16, e.detectedAlpha - simDt * 0.24);
+        }
+
+        // Check Waypoint / Impact Arrival
+        if (dist < 10) {
+          if (e.lockedUnitId) {
+            // Hit a player SAM/sensor unit!
+            const targetUnitIdx = state.units.findIndex(u => u.uid === e.lockedUnitId);
+            if (targetUnitIdx !== -1) {
+              const targetUnit = state.units[targetUnitIdx];
+              targetUnit.hp -= e.unitDamage;
+              audio.playExplosion(true);
+              spawnExplosion(targetUnit.x, targetUnit.y, '#ef4444', 18);
+              spawnFloatingText(targetUnit.x, targetUnit.y - 12, `-${e.unitDamage} HP!`, '#ef4444');
+              addCombatLog(`ВЛУЧАННЯ у ${targetUnit.shortName} (${e.name})!`, 'danger');
+              if (targetUnit.hp <= 0) {
+                addCombatLog(`ЗНИЩЕНО розрахунок ${targetUnit.shortName}!`, 'danger');
+                if (state.selectedUnitId === targetUnit.uid) closeInspector();
+                state.units.splice(targetUnitIdx, 1);
+              } else if (state.selectedUnitId === targetUnit.uid) {
+                openUnitInspector(targetUnit.uid);
+              }
+            }
+            if (state.priorityEnemyId === e.uid) state.priorityEnemyId = null;
+            state.enemies.splice(i, 1);
+            state.waveStats.leaked++;
+            continue;
+          } else if (e.waypoints.length > 1) {
+            e.waypoints.shift();
+          } else {
+            // Reached Target City!
+            const city = state.cities.find(c => c.id === e.targetCityId);
+            if (city) {
+              city.hp = Math.max(0, city.hp - e.cityDamage);
+              audio.playExplosion(true);
+              spawnExplosion(city.x, city.y, '#ef4444', 22);
+              spawnFloatingText(city.x, city.y - 16, `УДАР ПО М. ${city.name.toUpperCase()} (-${e.cityDamage}%)`, '#ef4444');
+              addCombatLog(`УДАР по м. ${city.name}: цілісність ${Math.ceil(city.hp)}%`, 'danger');
+              if (state.selectedCityId === city.id) openCityInspector(city.id);
+            }
+            if (state.priorityEnemyId === e.uid) state.priorityEnemyId = null;
+            state.enemies.splice(i, 1);
+            state.waveStats.leaked++;
+            continue;
+          }
+        }
+      }
+
+      // Toggle Ballistic Warning Banner
+      const urgentBanner = document.getElementById('urgentBanner');
+      if (hasBallisticAirborne) {
+        urgentBanner.classList.remove('hidden');
+      } else {
+        urgentBanner.classList.add('hidden');
+      }
+
+      // 4. Update SAM Units & Auto/Priority Firing Logic
+      const reloadMult = getReloadSpeedMultiplier();
+
+      for (const u of state.units) {
+        const def = UNIT_TYPES[u.type];
+        if (u.maxAmmo <= 0) continue;
+
+        if (u.cooldownTimer > 0) u.cooldownTimer -= simDt;
+
+        // Auto-reload when magazine hits 0 (if player has budget)
+        if (unitNeedsAutoReload(u)) {
+          u.reloadingTimer += simDt * reloadMult;
+          if (u.reloadingTimer >= def.reloadTime) {
+            const cost = Math.ceil(u.maxAmmo * def.ammoCostPerUnit * getDiscountMultiplier());
+            if (state.money >= cost) {
+              state.money -= cost;
+              u.ammo = u.maxAmmo;
+              u.reloadingTimer = 0;
+              spawnFloatingText(u.x, u.y - 14, `Авто-БК (-$${cost})`, '#22d3ee');
+              if (state.selectedUnitId === u.uid) openUnitInspector(u.uid);
+            } else {
+              u.reloadingTimer = def.reloadTime * 0.9; // Wait until funds available
+            }
+          }
+          continue;
+        }
+
+        if (u.cooldownTimer > 0 || u.ammo <= 0) continue;
+
+        // Find best target in range
+        const target = pickTargetForUnit(u, def);
+        if (target) {
+          fireUnitAtEnemy(u, def, target);
+        }
+      }
+
+      // 5. Update Interceptors / Projectiles
+      for (let i = state.projectiles.length - 1; i >= 0; i--) {
+        const p = state.projectiles[i];
+        if (p.launchDelay > 0) {
+          p.launchDelay = Math.max(0, p.launchDelay - simDt);
+          continue;
+        }
+        const target = state.enemies.find(e => e.uid === p.targetUid);
+
+        if (!target) {
+          state.projectiles.splice(i, 1);
+          continue;
+        }
+
+        const dx = target.x - p.x;
+        const dy = target.y - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist <= p.speed * simDt + 6) {
+          // Impact check
+          state.projectiles.splice(i, 1);
+          if (Math.random() <= p.hitChance) {
+            state.waveStats.hits++;
+            target.hp -= p.damage;
+            spawnExplosion(target.x, target.y, p.color, p.isMissile ? 12 : 5);
+            if (target.hp <= 0) {
+              destroyEnemy(target, p.sourceUnitUid);
+            }
+          } else {
+            spawnFloatingText(target.x, target.y - 8, 'ПРОМАХ', '#94a3b8');
+          }
+        } else {
+          p.x += (dx / dist) * p.speed * simDt;
+          p.y += (dy / dist) * p.speed * simDt;
+          p.trail.push({ x: p.x, y: p.y });
+          if (p.trail.length > 8) p.trail.shift();
+        }
+      }
+
+      // 6. Update Visual Particles & Floating Texts
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const pt = state.particles[i];
+        pt.x += pt.vx * simDt;
+        pt.y += pt.vy * simDt;
+        pt.life -= simDt;
+        if (pt.life <= 0) state.particles.splice(i, 1);
+      }
+
+      for (let i = state.floatingTexts.length - 1; i >= 0; i--) {
+        const ft = state.floatingTexts[i];
+        ft.y -= 18 * simDt;
+        ft.life -= simDt;
+        if (ft.life <= 0) state.floatingTexts.splice(i, 1);
+      }
+
+      // 7. Check Defeat & Wave Completion Conditions
+      const infraPct = getOverallInfraPercent();
+      if (infraPct <= 0) {
+        triggerGameOver('КРИТИЧНУ ІНФРАСТРУКТУРУ ВТРАЧЕНО', 'Ворожі удари вивели з ладу ключові енергетичні та командні вузли України.');
+        return;
+      }
+
+      if (state.phase === 'combat' && state.waveSpawnQueue.length === 0 && state.enemies.length === 0) {
+        completeCurrentWave();
+      }
+    }
+
+    function unitNeedsAutoReload(u) {
+      return u.maxAmmo > 0 && u.ammo === 0;
+    }
+
+    function pickTargetForUnit(u, def) {
+      // 1. Check Priority Target first!
+      if (state.priorityEnemyId) {
+        const prio = state.enemies.find(e => e.uid === state.priorityEnemyId);
+        if (prio && def.canTarget.includes(prio.type)) {
+          const d = Math.hypot(prio.x - u.x, prio.y - u.y);
+          if (d <= def.range) return prio;
+        }
+      }
+
+      // 2. Otherwise pick closest valid detected enemy respecting SAM doctrine
+      let best = null;
+      let bestScore = Infinity;
+
+      for (const e of state.enemies) {
+        if (!def.canTarget.includes(e.type)) continue;
+        // Must be detected (alpha > 0.3) or inside unit's own optical/acoustic range
+        const d = Math.hypot(e.x - u.x, e.y - u.y);
+        if (d > def.range) continue;
+        if (e.detectedAlpha < 0.3 && d > def.acousticRange) continue;
+
+        // Smart SAM Doctrine: if 'missiles_only', ignore cheap Shaheds/Lancets unless they are directly attacking THIS unit!
+        if (u.doctrine === 'missiles_only' && (e.type === 'shahed' || e.type === 'lancet')) {
+          if (e.lockedUnitId !== u.uid) continue;
+        }
+
+        // Prioritize ballistic & cruise missiles slightly over slow drones
+        const threatWeight = e.isBallistic ? 0.45 : (e.type === 'cruise' || e.type === 'arm' ? 0.72 : 1.0);
+        const score = d * threatWeight;
+        if (score < bestScore) {
+          bestScore = score;
+          best = e;
+        }
+      }
+
+      return best;
+    }
+
+    function fireUnitAtEnemy(u, def, target) {
+      // One ammo unit represents one firing cycle; burst weapons launch N rounds per cycle.
+      u.ammo = Math.max(0, u.ammo - 1);
+      u.cooldownTimer = def.cooldown;
+
+      const isMissile = u.type === 'irist' || u.type === 'patriot';
+      const burstSize = Math.max(1, Math.min(12, Math.floor(def.burstSize || 1)));
+      const perRoundDamage = def.damage / burstSize;
+      state.waveStats.shotsFired += burstSize;
+
+      if (isMissile) {
+        audio.playSamLaunch(u.type === 'patriot');
+      } else {
+        audio.playAutocannon(u.type === 'gepard');
+      }
+
+      const dx = target.x - u.x;
+      const dy = target.y - u.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const nx = -dy / length;
+      const ny = dx / length;
+
+      for (let i = 0; i < burstSize; i++) {
+        const spread = (i - (burstSize - 1) / 2) * 1.7;
+        const startX = u.x + nx * spread;
+        const startY = u.y + ny * spread;
+        state.projectiles.push({
+          x: startX,
+          y: startY,
+          targetUid: target.uid,
+          sourceUnitUid: u.uid,
+          speed: def.projectileSpeed,
+          damage: perRoundDamage,
+          hitChance: def.hitChance[target.type] ?? 0.75,
+          color: def.color,
+          isMissile,
+          launchDelay: i * 0.045,
+          trail: [{ x: startX, y: startY }]
+        });
+      }
+
+      if (state.selectedUnitId === u.uid) {
+        openUnitInspector(u.uid);
+      }
+    }
+
+    function destroyEnemy(enemy, killerUnitUid) {
+      const idx = state.enemies.findIndex(e => e.uid === enemy.uid);
+      if (idx === -1) return;
+
+      state.enemies.splice(idx, 1);
+      if (state.priorityEnemyId === enemy.uid) state.priorityEnemyId = null;
+
+      state.waveStats.destroyed++;
+      state.totalDestroyed = (state.totalDestroyed || 0) + 1;
+      state.money += enemy.reward;
+      state.score += enemy.reward * 10;
+
+      const killer = state.units.find(u => u.uid === killerUnitUid);
+      if (killer) {
+        killer.kills++;
+        if (state.selectedUnitId === killer.uid) openUnitInspector(killer.uid);
+      }
+
+      audio.playExplosion(enemy.isBallistic || enemy.type === 'cruise');
+      spawnExplosion(enemy.x, enemy.y, enemy.color, enemy.isBallistic ? 24 : 14);
+      spawnFloatingText(enemy.x, enemy.y - 10, `+$${enemy.reward}`, '#34d399');
+      addCombatLog(`ЗБИТО: ${enemy.name}${killer ? ` (${killer.shortName})` : ''}`, 'success');
+    }
+
+    function completeCurrentWave() {
+      state.phase = 'prep';
+      state.urgentBanner = false;
+      document.getElementById('urgentBanner').classList.add('hidden');
+
+      // Calculate strategic city income bonuses
+      let bonusMoney = 140 + state.wave * 25;
+      const bonusLines = [`Базове фінансування командування: +$${bonusMoney}`];
+
+      if (isCityOperational('kyiv')) {
+        bonusMoney += 80;
+        bonusLines.push('🏛 Київ (Енерговузол цілий): +$80');
+      }
+      if (isCityOperational('odesa')) {
+        bonusMoney += 120;
+        bonusLines.push('⚓ Одеса (Морський порт працює): +$120');
+      }
+      if (isCityOperational('kharkiv')) {
+        state.score += 150;
+        bonusLines.push('🏭 Харків (Стійкість форпосту): +150 очок');
+      }
+
+      state.money += bonusMoney;
+      state.score += state.waveStats.destroyed * 50;
+
+      // Honest Accuracy Calculation
+      const acc = state.waveStats.shotsFired > 0
+        ? Math.round((state.waveStats.hits / state.waveStats.shotsFired) * 100)
+        : 0;
+
+      const leaked = state.waveStats.leaked;
+      const tagEl = document.getElementById('debriefTag');
+      const titleEl = document.getElementById('debriefTitle');
+      const summaryEl = document.getElementById('debriefSummary');
+      const iconEl = document.getElementById('debriefIcon');
+
+      if (leaked === 0) {
+        tagEl.textContent = '100% ПЕРЕХОПЛЕННЯ';
+        tagEl.className = 'font-mono-tech text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40';
+        titleEl.textContent = `Хвилю ${state.wave} повністю відбито!`;
+        summaryEl.textContent = 'Усі повітряні цілі противника знищено на підступах. Критична інфраструктура не зазнала нових ушкоджень.';
+        iconEl.textContent = '🛡️';
+      } else {
+        tagEl.textContent = 'БОЙОВИЙ ЗВІТ';
+        tagEl.className = 'font-mono-tech text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40';
+        titleEl.textContent = `Хвилю ${state.wave} завершено`;
+        summaryEl.textContent = `Більшість загроз перехоплено, проте ${leaked} ціл${leaked === 1 ? 'ь прорвалася' : 'ей прорвалися'} крізь рубежі ППО. Перевірте стан міст та поповніть БК.`;
+        iconEl.textContent = '⚠️';
+      }
+
+      document.getElementById('statDestroyed').textContent = `${state.waveStats.destroyed} / ${state.waveStats.totalTargets}`;
+      document.getElementById('statLeaked').textContent = `${leaked}`;
+      document.getElementById('statAccuracy').textContent = `${acc}%`;
+      document.getElementById('statReward').textContent = `+$${bonusMoney}`;
+      document.getElementById('debriefBonusesList').innerHTML = bonusLines.map(l => `<div>${l}</div>`).join('');
+
+      state.wave++;
+      const btn = document.getElementById('debriefPrimaryBtn');
+      btn.textContent = `ПЕРЕЙТИ ДО ПІДГОТОВКИ ХВИЛІ ${state.wave}`;
+      btn.dataset.action = 'next_wave';
+
+      document.getElementById('debriefModal').classList.remove('hidden');
+      updateHudUI();
+    }
+
+    function triggerGameOver(title, reason) {
+      state.phase = 'gameover';
+      audio.playBallisticKlaxon();
+
+      const acc = state.waveStats.shotsFired > 0
+        ? Math.round((state.waveStats.hits / state.waveStats.shotsFired) * 100)
+        : 0;
+
+      document.getElementById('debriefTag').textContent = 'ОПЕРАЦІЮ ЗАВЕРШЕНО';
+      document.getElementById('debriefTag').className = 'font-mono-tech text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-red-500/25 text-red-300 border border-red-400/50';
+      document.getElementById('debriefTitle').textContent = title;
+      document.getElementById('debriefSummary').textContent = reason;
+      document.getElementById('debriefIcon').textContent = '🚨';
+
+      document.getElementById('statDestroyed').textContent = `${state.waveStats.destroyed}`;
+      document.getElementById('statLeaked').textContent = `${state.waveStats.leaked}`;
+      document.getElementById('statAccuracy').textContent = `${acc}%`;
+      document.getElementById('statReward').textContent = `Хвиля ${state.wave}`;
+      document.getElementById('debriefBonusesList').innerHTML =
+        `<div class="text-cyan-300 font-semibold">Підсумковий рахунок командування: ${state.score} очок</div>`;
+
+      const btn = document.getElementById('debriefPrimaryBtn');
+      btn.textContent = '🔄 РОЗПОЧАТИ НОВУ ОПЕРАЦІЮ';
+      btn.dataset.action = 'restart';
+
+      document.getElementById('debriefModal').classList.remove('hidden');
+    }
+
+    function handleDebriefAction() {
+      const btn = document.getElementById('debriefPrimaryBtn');
+      document.getElementById('debriefModal').classList.add('hidden');
+      if (btn.dataset.action === 'restart') {
+        restartFullGame();
+      } else {
+        updateHudUI();
+      }
+    }
+
+    function restartFullGame() {
+      state.money = 950;
+      state.score = 0;
+      state.totalDestroyed = 0;
+      state.wave = 1;
+      state.phase = 'prep';
+      state.gameSpeed = 1;
+      state.prevSpeedBeforePause = 1;
+      state.radarAngle = 0;
+      state.lastPingQuadrant = -1;
+      state.waveSpawnQueue = [];
+      state.waveTotalEnemies = 0;
+      state.waveSpawnedCount = 0;
+      state.waveCorridorsActive = [];
+      state.waveTimer = 0;
+      state.waveStats = {shotsFired:0, hits:0, destroyed:0, leaked:0, totalTargets:0};
+      state.urgentBanner = false;
+      state.cities = JSON.parse(JSON.stringify(INITIAL_CITIES));
+      state.units = [];
+      state.enemies = [];
+      state.projectiles = [];
+      state.particles = [];
+      state.floatingTexts = [];
+      state.combatLogs = [];
+      state.priorityEnemyId = null;
+      document.getElementById('urgentBanner').classList.add('hidden');
+      closeInspector();
+      cancelPlacement();
+      resetCameraFit();
+      setGameSpeed(1);
+      renderCombatLog();
+      updateHudUI();
+    }
+
+    // ============================================================================
+    // RENDERING ENGINE (HIGH-DPI RADAR MAP, SCALE RANGES, CITIES, UNITS, THREATS)
+    // ============================================================================
+    function renderMainCanvas() {
+      ctx.save();
+      // Deep tactical phosphor background
+      ctx.fillStyle = '#04090d';
+      ctx.fillRect(0, 0, viewportW, viewportH);
+
+      // Apply Camera Transform
+      const cameraView = getCameraViewportMetrics();
+      ctx.translate(cameraView.centerX, cameraView.centerY);
+      ctx.scale(state.camera.zoom, state.camera.zoom);
+      ctx.translate(-state.camera.x, -state.camera.y);
+
+      const invZoomClamped = Math.pow(state.camera.zoom, -0.72); // Zoom-safe label scale
+
+      // 1. Tactical Latitude/Longitude Coordinate Grid (every 200 units ≈ 101 km)
+      if (!window.avxConfig || window.avxConfig.grid !== false) {
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.06)';
+      ctx.lineWidth = 1 / state.camera.zoom;
+      for (let gx = 0; gx <= WORLD_W; gx += 200) {
+        ctx.beginPath();
+        ctx.moveTo(gx, 0);
+        ctx.lineTo(gx, WORLD_H);
+        ctx.stroke();
+      }
+      for (let gy = 0; gy <= WORLD_H; gy += 200) {
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(WORLD_W, gy);
+        ctx.stroke();
+      }
+
+      }
+      // 2. Neighboring Regions & Seas Geographic Labels
+      ctx.save();
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.22)';
+      ctx.font = `600 ${Math.round(16 * invZoomClamped)}px "JetBrains Mono", monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('ПОЛЬЩА', remapMapX(135), 510);
+      ctx.fillText('БІЛОРУСЬ', remapMapX(890), 145);
+      ctx.fillText('РФ (ТЕРИТОРІЯ АГРЕСОРА)', remapMapX(2020), 250);
+      ctx.fillText('РУМУНІЯ', remapMapX(680), 1140);
+      ctx.fillText('МОЛДОВА', remapMapX(865), 1015);
+      ctx.fillStyle = 'rgba(34, 211, 238, 0.22)';
+      ctx.fillText('ЧОРНЕ МОРЕ', remapMapX(1240), 1390);
+      ctx.fillText('АЗОВСЬКЕ МОРЕ', remapMapX(1940), 1190);
+      ctx.restore();
+
+      // 3. Ukraine: real OSM-derived oblast geometry, or visibly labelled schematic fallback.
+      if (UKRAINE_OBLASTS.length) {
+        drawGeoJsonOblasts();
+      } else {
+        drawPolygon(UKRAINE_MAINLAND, 'rgba(12, 32, 44, 0.72)', 'rgba(34, 211, 238, 0.55)', 2.2 / state.camera.zoom);
+        drawPolygon(CRIMEA_POLYGON, 'rgba(12, 32, 44, 0.72)', 'rgba(34, 211, 238, 0.55)', 2.0 / state.camera.zoom);
+      }
+
+      // 4. Dnipro River Vector
+      ctx.save();
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.32)';
+      ctx.lineWidth = 4.5 / state.camera.zoom;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      DNIPRO_RIVER.forEach(([rx, ry], idx) => {
+        if (idx === 0) ctx.moveTo(rx, ry);
+        else ctx.lineTo(rx, ry);
+      });
+      ctx.stroke();
+      ctx.restore();
+
+      // 5. Rotating Main C2 Radar Sweep Beam & Concentric Range Rings
+      const mainRadarR = getMainRadarRadius();
+      const ox = state.radarOrigin.x;
+      const oy = state.radarOrigin.y;
+
+      // Range rings around Central Radar (every 150 km)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.11)';
+      ctx.lineWidth = 1 / state.camera.zoom;
+      for (const kmRing of [150, 300, 450]) {
+        const rUnits = kmRing / KM_PER_UNIT;
+        if (rUnits <= mainRadarR) {
+          ctx.beginPath();
+          ctx.arc(ox, oy, rUnits, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      // Main Radar Outer Boundary
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.25)';
+      ctx.setLineDash([8 / state.camera.zoom, 6 / state.camera.zoom]);
+      ctx.beginPath();
+      ctx.arc(ox, oy, mainRadarR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Phosphor Sweep Wedge
+      const sweepSpread = 0.42;
+      const grad = ctx.createRadialGradient(ox, oy, 10, ox, oy, mainRadarR);
+      grad.addColorStop(0, 'rgba(34, 211, 238, 0.22)');
+      grad.addColorStop(1, 'rgba(34, 211, 238, 0.02)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.arc(ox, oy, mainRadarR, state.radarAngle - sweepSpread, state.radarAngle);
+      ctx.closePath();
+      ctx.fill();
+
+      // Leading edge bright beam
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.55)';
+      ctx.lineWidth = 1.8 / state.camera.zoom;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(ox + Math.cos(state.radarAngle) * mainRadarR, oy + Math.sin(state.radarAngle) * mainRadarR);
+      ctx.stroke();
+      ctx.restore();
+
+      // 6. Threat Launch Corridors Preview (in Prep Phase)
+      if (state.phase === 'prep') {
+        for (const c of SPAWN_CORRIDORS) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.18)';
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+          ctx.lineWidth = 1.5 / state.camera.zoom;
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, 18 * invZoomClamped, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#fca5a5';
+          ctx.font = `600 ${Math.round(11 * invZoomClamped)}px "JetBrains Mono", monospace`;
+          ctx.textAlign = 'center';
+          ctx.fillText(`⚠ ${c.label}`, c.x, c.y + 30 * invZoomClamped);
+          ctx.restore();
+        }
+      }
+
+      // 7. Reference geography: major cities without gameplay effects.
+      for (const city of REFERENCE_CITIES) {
+        const r = 3.2 * invZoomClamped;
+        ctx.save();
+        ctx.fillStyle = 'rgba(203,213,225,.78)';
+        ctx.strokeStyle = 'rgba(2,6,23,.9)';
+        ctx.lineWidth = 1.2 / state.camera.zoom;
+        ctx.beginPath(); ctx.arc(city.x, city.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.font = `500 ${Math.round(9 * invZoomClamped)}px Inter, sans-serif`;
+        ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(226,232,240,.82)';
+        ctx.fillText(city.name, city.x, city.y - r - 3 * invZoomClamped);
+        ctx.restore();
+      }
+
+      // 8. Render 8 Strategic Cities
+      for (const city of state.cities) {
+        const operational = city.hp > 25;
+        const isSelected = state.selectedCityId === city.id;
+        const r = (city.isCapital ? 9 : 7) * invZoomClamped;
+
+        ctx.save();
+        // Outer glow
+        ctx.fillStyle = operational ? 'rgba(16, 185, 129, 0.22)' : 'rgba(239, 68, 68, 0.28)';
+        ctx.beginPath();
+        ctx.arc(city.x, city.y, r * 2.1, 0, Math.PI * 2);
+        ctx.fill();
+
+        // City Core Diamond/Circle
+        ctx.fillStyle = operational ? '#10b981' : '#ef4444';
+        ctx.strokeStyle = isSelected ? '#ffffff' : '#04090d';
+        ctx.lineWidth = 2 / state.camera.zoom;
+        ctx.beginPath();
+        ctx.arc(city.x, city.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // City Name & HP Label
+        ctx.font = `700 ${Math.round((city.isCapital ? 13 : 11.5) * invZoomClamped)}px "Inter", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = operational ? '#f1f5f9' : '#fca5a5';
+        ctx.fillText(city.name, city.x, city.y - r - 6 * invZoomClamped);
+
+        if (city.hp < 100) {
+          ctx.font = `600 ${Math.round(9.5 * invZoomClamped)}px "JetBrains Mono", monospace`;
+          ctx.fillStyle = operational ? '#fbbf24' : '#f87171';
+          ctx.fillText(`${Math.ceil(city.hp)}%`, city.x, city.y + r + 12 * invZoomClamped);
+        }
+        ctx.restore();
+      }
+
+      // 8. Render Placed Tactical Units & Engagement Circles
+      for (const u of state.units) {
+        const def = UNIT_TYPES[u.type];
+        const isSelected = state.selectedUnitId === u.uid;
+
+        ctx.save();
+        // Engagement / Acoustic Range Circle
+        ctx.strokeStyle = isSelected
+          ? 'rgba(34, 211, 238, 0.78)'
+          : (u.emcon ? 'rgba(245, 158, 11, 0.22)' : 'rgba(34, 211, 238, 0.24)');
+        ctx.fillStyle = isSelected ? 'rgba(34, 211, 238, 0.08)' : 'rgba(34, 211, 238, 0.025)';
+        ctx.lineWidth = (isSelected ? 2 : 1.1) / state.camera.zoom;
+        if (u.emcon) ctx.setLineDash([6 / state.camera.zoom, 5 / state.camera.zoom]);
+
+        ctx.beginPath();
+        ctx.arc(u.x, u.y, def.range, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Unit Tactical Symbol
+        const ur = 8.5 * invZoomClamped;
+        ctx.fillStyle = '#07131c';
+        ctx.strokeStyle = u.emcon ? '#f59e0b' : def.color;
+        ctx.lineWidth = 2.2 / state.camera.zoom;
+        ctx.beginPath();
+        ctx.arc(u.x, u.y, ur, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Center dot
+        ctx.fillStyle = u.emcon ? '#f59e0b' : def.color;
+        ctx.beginPath();
+        ctx.arc(u.x, u.y, ur * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Compact Label & Ammo Status
+        ctx.font = `600 ${Math.round(10 * invZoomClamped)}px "JetBrains Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = u.emcon ? '#fcd34d' : '#bae6fd';
+        const ammoTag = u.maxAmmo > 0 ? ` [${u.ammo}]` : '';
+        ctx.fillText(`${def.shortName}${ammoTag}`, u.x, u.y + ur + 11 * invZoomClamped);
+        ctx.restore();
+      }
+
+      // 9. Ghost Placement Preview when Placing a Unit
+      if (state.placingUnitType) {
+        const def = UNIT_TYPES[state.placingUnitType];
+        const wx = state.pointer.worldX;
+        const wy = state.pointer.worldY;
+        const validPos = isInsideUkraine(wx, wy) && state.money >= def.cost;
+
+        ctx.save();
+        ctx.strokeStyle = validPos ? 'rgba(16, 185, 129, 0.85)' : 'rgba(239, 68, 68, 0.85)';
+        ctx.fillStyle = validPos ? 'rgba(16, 185, 129, 0.14)' : 'rgba(239, 68, 68, 0.14)';
+        ctx.lineWidth = 2 / state.camera.zoom;
+        ctx.setLineDash([8 / state.camera.zoom, 6 / state.camera.zoom]);
+
+        ctx.beginPath();
+        ctx.arc(wx, wy, def.range, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Center Marker
+        ctx.fillStyle = validPos ? '#10b981' : '#ef4444';
+        ctx.beginPath();
+        ctx.arc(wx, wy, 7 * invZoomClamped, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Range in km & Cost Tooltip directly on map
+        const kmStr = (def.range * KM_PER_UNIT).toFixed(1);
+        ctx.font = `700 ${Math.round(11.5 * invZoomClamped)}px "JetBrains Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = validPos ? '#6ee7b7' : '#fca5a5';
+        ctx.fillText(`${def.shortName} • ${kmStr} км • $${def.cost}`, wx, wy - 14 * invZoomClamped);
+        ctx.restore();
+      }
+
+      // 10. Render Enemy Threats (with Radar Phosphor Fade & Priority Lock Reticle)
+      for (const e of state.enemies) {
+        const alpha = e.detectedAlpha;
+        const drawX = alpha > 0.55 ? e.x : e.ghostX;
+        const drawY = alpha > 0.55 ? e.y : e.ghostY;
+        const isPriority = state.priorityEnemyId === e.uid;
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(0.22, alpha);
+
+        // Phosphor Trail
+        if (e.trail.length > 1) {
+          ctx.strokeStyle = e.color;
+          ctx.lineWidth = 1.6 / state.camera.zoom;
+          ctx.beginPath();
+          e.trail.forEach((pt, idx) => {
+            if (idx === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
+          });
+          ctx.stroke();
+        }
+
+        // Predicted Velocity Vector
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 1.1 / state.camera.zoom;
+        ctx.setLineDash([4 / state.camera.zoom, 4 / state.camera.zoom]);
+        ctx.beginPath();
+        ctx.moveTo(drawX, drawY);
+        ctx.lineTo(drawX + e.ghostVx * 0.75, drawY + e.ghostVy * 0.75);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Enemy Blip Icon (Rotated Triangle / Diamond)
+        const angle = Math.atan2(e.vy, e.vx);
+        const rad = e.radius * invZoomClamped * 1.35;
+        ctx.translate(drawX, drawY);
+        ctx.rotate(angle);
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.moveTo(rad * 1.4, 0);
+        ctx.lineTo(-rad, rad * 0.85);
+        ctx.lineTo(-rad * 0.5, 0);
+        ctx.lineTo(-rad, -rad * 0.85);
+        ctx.closePath();
+        ctx.fill();
+        ctx.rotate(-angle);
+
+        // Priority Target Lock Diamond [!]
+        if (isPriority) {
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 2.2 / state.camera.zoom;
+          const lr = rad * 2.2;
+          ctx.strokeRect(-lr, -lr, lr * 2, lr * 2);
+          ctx.fillStyle = '#fca5a5';
+          ctx.font = `700 ${Math.round(10 * invZoomClamped)}px "JetBrains Mono", monospace`;
+          ctx.textAlign = 'center';
+          ctx.fillText('[!] ПРІОРИТЕТ', 0, -lr - 5 * invZoomClamped);
+        } else if (alpha > 0.45) {
+          ctx.font = `600 ${Math.round(9.5 * invZoomClamped)}px "JetBrains Mono", monospace`;
+          ctx.textAlign = 'center';
+          ctx.fillStyle = e.color;
+          const shortTag = e.isBallistic ? 'БАЛІСТИКА!' : (e.seadRadiation ? 'Х-31П' : (e.type === 'cruise' ? 'КР' : 'БПЛА'));
+          ctx.fillText(shortTag, 0, -rad - 5 * invZoomClamped);
+        }
+
+        ctx.restore();
+      }
+
+      // 11. Render SAM Interceptors & Autocannon Tracers
+      for (const p of state.projectiles) {
+        ctx.save();
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = (p.isMissile ? 2.4 : 1.6) / state.camera.zoom;
+        if (p.trail.length > 1) {
+          ctx.beginPath();
+          p.trail.forEach((pt, idx) => {
+            if (idx === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
+          });
+          ctx.stroke();
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, (p.isMissile ? 2.8 : 1.8) * invZoomClamped, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 12. Render Explosion Particles
+      for (const pt of state.particles) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.size * invZoomClamped, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 13. Render Floating Combat Text Callouts
+      for (const ft of state.floatingTexts) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, ft.life / 0.4);
+        ctx.font = `700 ${Math.round(11.5 * invZoomClamped)}px "JetBrains Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      }
+
+      ctx.restore();
+
+      // Render Minimap in sync
+      renderMinimap();
+    }
+
+    function drawPolygon(points, fillStyle, strokeStyle, lineWidth) {
+      ctx.save();
+      ctx.fillStyle = fillStyle;
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      points.forEach(([px, py], i) => {
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawGeoJsonOblasts() {
+      ctx.save();
+      ctx.fillStyle = 'rgba(17, 55, 54, 0.38)';
+      ctx.strokeStyle = 'rgba(94, 234, 212, 0.44)';
+      ctx.lineWidth = 1.15 / state.camera.zoom;
+      for (const feature of UKRAINE_OBLASTS) {
+        ctx.beginPath();
+        for (const polygon of feature.polygons) {
+          for (const ring of polygon) {
+            ring.forEach(([x, y], i) => { if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+            ctx.closePath();
+          }
+        }
+        ctx.fill('evenodd');
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function renderMinimap() {
+      const mw = minimapCanvas.width;
+      const mh = minimapCanvas.height;
+      const sx = mw / WORLD_W;
+      const sy = mh / WORLD_H;
+
+      mctx.clearRect(0, 0, mw, mh);
+      mctx.fillStyle = '#03080c';
+      mctx.fillRect(0, 0, mw, mh);
+
+      // Ukraine geometry: actual oblasts when available, schematic fallback otherwise.
+      mctx.fillStyle = 'rgba(20, 52, 68, 0.85)';
+      mctx.strokeStyle = 'rgba(34, 211, 238, 0.5)';
+      mctx.lineWidth = 1;
+      const miniPolygons = UKRAINE_OBLASTS.length
+        ? UKRAINE_OBLASTS.flatMap(feature => feature.polygons.map(poly => poly[0]))
+        : [UKRAINE_MAINLAND, CRIMEA_POLYGON];
+      for (const poly of miniPolygons) {
+        mctx.beginPath();
+        poly.forEach(([x, y], i) => {
+          if (i === 0) mctx.moveTo(x * sx, y * sy);
+          else mctx.lineTo(x * sx, y * sy);
+        });
+        mctx.closePath(); mctx.fill(); mctx.stroke();
+      }
+
+      // Cities
+      for (const c of state.cities) {
+        mctx.fillStyle = c.hp > 25 ? '#10b981' : '#ef4444';
+        mctx.fillRect(c.x * sx - 1.5, c.y * sy - 1.5, 3, 3);
+      }
+
+      // Units
+      for (const u of state.units) {
+        mctx.fillStyle = '#38bdf8';
+        mctx.fillRect(u.x * sx - 1.2, u.y * sy - 1.2, 2.4, 2.4);
+      }
+
+      // Enemies
+      for (const e of state.enemies) {
+        if (e.detectedAlpha > 0.35) {
+          mctx.fillStyle = e.color;
+          mctx.fillRect(e.x * sx - 1.5, e.y * sy - 1.5, 3, 3);
+        }
+      }
+
+      // Camera Viewport Rectangle
+      const mapView = getCameraViewportMetrics();
+      const topLeft = screenToWorld(mapView.left, mapView.top);
+      const botRight = screenToWorld(mapView.right, mapView.bottom);
+      mctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+      mctx.lineWidth = 1.2;
+      mctx.strokeRect(
+        topLeft.x * sx,
+        topLeft.y * sy,
+        (botRight.x - topLeft.x) * sx,
+        (botRight.y - topLeft.y) * sy
+      );
+    }
+
+    // ============================================================================
+    // UI RENDERING (TOP BAR, CITIES STRIP, UNIT DOCK)
+    // ============================================================================
+    let lastCitiesListSignature = null;
+    let lastUnitDockSignature = null;
+    function updateHudUI() {
+      document.getElementById('hudWave').textContent = state.wave;
+      document.getElementById('hudMoney').textContent = Math.floor(state.money).toLocaleString('uk-UA');
+      document.getElementById('hudScore').textContent = state.score;
+
+      const infra = getOverallInfraPercent();
+      const infraEl = document.getElementById('hudInfra');
+      infraEl.textContent = `${infra}%`;
+      infraEl.className = `font-mono-tech font-bold text-xs sm:text-sm ${
+        infra > 65 ? 'text-cyan-300' : infra > 35 ? 'text-amber-400' : 'text-red-400'
+      }`;
+
+      // Wave Pill Status
+      const phaseText = document.getElementById('wavePhaseText');
+      const phaseDot = document.getElementById('wavePhaseDot');
+      const startBtn = document.getElementById('btnStartWave');
+
+      if (state.phase === 'prep') {
+        phaseDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+        phaseText.textContent = `ПІДГОТОВКА • ХВИЛЯ ${state.wave}`;
+        startBtn.classList.remove('hidden');
+      } else if (state.phase === 'combat') {
+        const remaining = state.waveSpawnQueue.length + state.enemies.length;
+        phaseDot.className = 'w-2 h-2 rounded-full bg-red-500 animate-ping';
+        phaseText.textContent = `ХВИЛЯ ${state.wave} • ЗАГРОЗ: ${remaining} / ${state.waveTotalEnemies}`;
+        startBtn.classList.add('hidden');
+      }
+
+      const citiesSignature = state.cities.map(city => `${city.id}:${Math.ceil(city.hp)}`).join('|');
+      if (citiesSignature !== lastCitiesListSignature) {
+        lastCitiesListSignature = citiesSignature;
+        renderCitiesList();
+      }
+      const dockSignature = `${Object.values(UNIT_TYPES).map(unit => state.money >= unit.cost ? 1 : 0).join('')}:${state.placingUnitType || ''}`;
+      if (dockSignature !== lastUnitDockSignature) {
+        lastUnitDockSignature = dockSignature;
+        renderUnitDock();
+      }
+    }
+
+    function renderCitiesList() {
+      const list = document.getElementById('citiesList');
+      if (!list) return;
+      list.innerHTML = state.cities.map(c => {
+        const ok = c.hp > 25;
+        return `
+          <button onclick="focusOnCity('${c.id}')"
+            class="c2-btn w-full flex items-center justify-between gap-2 px-2 py-1 rounded-lg text-left hover:bg-cyan-500/10 transition">
+            <span class="text-[11px] font-medium truncate ${ok ? 'text-slate-200' : 'text-red-400 font-bold'}">${c.name}</span>
+            <span class="font-mono-tech text-[10px] ${ok ? 'text-emerald-400' : 'text-red-400'}">${Math.ceil(c.hp)}%</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function focusOnCity(cityId) {
+      const city = state.cities.find(c => c.id === cityId);
+      if (!city) return;
+      state.camera.x = city.x;
+      state.camera.y = city.y;
+      cameraIsFitted = false;
+      if (state.camera.zoom < 1.1) state.camera.zoom = 1.25;
+      clampCamera();
+      updateScaleBarUI();
+      openCityInspector(city.id);
+    }
+
+    function toggleCitiesList() {
+      const list = document.getElementById('citiesList');
+      const icon = document.getElementById('citiesToggleIcon');
+      list.classList.toggle('hidden');
+      icon.textContent = list.classList.contains('hidden') ? '▸' : '▾';
+    }
+
+    function renderUnitDock() {
+      const dock = document.getElementById('unitDock');
+      if (!dock) return;
+
+      dock.innerHTML = Object.values(UNIT_TYPES).map(u => {
+        const isPlacing = state.placingUnitType === u.id;
+        const canAfford = state.money >= u.cost;
+        const rangeKm = (u.range * KM_PER_UNIT).toFixed(1);
+
+        return `
+          <button onclick="selectUnitToPlace('${u.id}')"
+            class="c2-btn relative flex-shrink-0 flex flex-col items-start justify-between rounded-xl px-2.5 py-1.5 min-w-[114px] sm:min-w-[132px] border text-left
+            ${isPlacing
+              ? 'bg-cyan-500/25 border-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.35)]'
+              : canAfford
+                ? 'bg-slate-900/90 hover:bg-slate-800/95 border-slate-700/90 hover:border-cyan-400/50'
+                : 'bg-slate-950/70 border-slate-800/80 opacity-55'}">
+            <div class="w-full flex items-center justify-between gap-1">
+              <span class="text-sm">${u.icon}</span>
+              <span class="font-mono-tech text-[10px] px-1 rounded bg-slate-800 text-slate-400">${u.key}</span>
+            </div>
+            <div class="font-semibold text-[11px] sm:text-xs text-slate-100 mt-0.5 truncate w-full">${u.shortName}</div>
+            <div class="w-full flex items-center justify-between mt-0.5 font-mono-tech text-[10px]">
+              <span class="${canAfford ? 'text-emerald-400 font-bold' : 'text-red-400'}">$${u.cost}</span>
+              <span class="text-cyan-300/90">${rangeKm} км</span>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    // ============================================================================
+    // CONTROLS: TIME SPEED, AUDIO, MODALS, POINTER/TOUCH PAN & ZOOM
+    // ============================================================================
+    function setGameSpeed(spd) {
+      audio.unlock();
+      audio.playUiClick();
+      if (spd > 0) state.prevSpeedBeforePause = spd;
+      state.gameSpeed = spd;
+
+      [0, 1, 2].forEach(s => {
+        const btn = document.getElementById(`btnSpeed${s}`);
+        if (!btn) return;
+        if (s === spd) {
+          btn.className = 'c2-btn px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-mono-tech font-semibold bg-cyan-500/25 text-cyan-300 border border-cyan-400/40';
+        } else {
+          btn.className = 'c2-btn px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-mono-tech font-semibold text-slate-300 hover:text-white';
+        }
+      });
+    }
+
+    function toggleAudio() {
+      audio.muted = !audio.muted;
+      if (!audio.muted) {
+        audio.unlock();
+        audio.playUiClick();
+      }
+      document.getElementById('btnAudio').textContent = audio.muted ? '🔇' : '🔊';
+    }
+
+    function openHelpModal() {
+      audio.playUiClick();
+      document.getElementById('helpModal').classList.remove('hidden');
+    }
+    function closeHelpModal() {
+      document.getElementById('helpModal').classList.add('hidden');
+    }
+    function openSupportModal() {
+      audio.playUiClick();
+      document.getElementById('supportModal').classList.remove('hidden');
+    }
+    function closeSupportModal() {
+      document.getElementById('supportModal').classList.add('hidden');
+    }
+
+    // Handle Map Tap / Click (Place Unit, Priority Lock Enemy, Select SAM, or Select City)
+    function handleMapClick(wx, wy, keepPlacement = false) {
+      audio.unlock();
+
+      // 1. Placement Mode
+      if (state.placingUnitType) {
+        tryPlaceUnitAt(wx, wy, keepPlacement);
+        return;
+      }
+
+      const clickRadius = 18 / Math.pow(state.camera.zoom, 0.65);
+
+      // 2. Check Detected Enemy Blip -> Priority Target Lock [!]
+      let clickedEnemy = null;
+      let bestEnemyDist = clickRadius * 1.25;
+      for (const e of state.enemies) {
+        if (e.detectedAlpha < 0.28) continue;
+        const d = Math.hypot(e.x - wx, e.y - wy);
+        if (d < bestEnemyDist) {
+          bestEnemyDist = d;
+          clickedEnemy = e;
+        }
+      }
+      if (clickedEnemy) {
+        state.priorityEnemyId = clickedEnemy.uid;
+        audio.playLockTarget();
+        spawnFloatingText(clickedEnemy.x, clickedEnemy.y - 14, 'ПРІОРИТЕТНА ЦІЛЬ [!]', '#ef4444');
+        addCombatLog(`Пріоритетне цілевказання: ${clickedEnemy.name}`, 'danger');
+        return;
+      }
+
+      // 3. Check Placed Tactical Units
+      let clickedUnit = null;
+      let bestUnitDist = clickRadius;
+      for (const u of state.units) {
+        const d = Math.hypot(u.x - wx, u.y - wy);
+        if (d < bestUnitDist) {
+          bestUnitDist = d;
+          clickedUnit = u;
+        }
+      }
+      if (clickedUnit) {
+        audio.playUiClick();
+        openUnitInspector(clickedUnit.uid);
+        return;
+      }
+
+      // 4. Check Strategic Cities
+      let clickedCity = null;
+      let bestCityDist = clickRadius * 1.2;
+      for (const c of state.cities) {
+        const d = Math.hypot(c.x - wx, c.y - wy);
+        if (d < bestCityDist) {
+          bestCityDist = d;
+          clickedCity = c;
+        }
+      }
+      if (clickedCity) {
+        audio.playUiClick();
+        openCityInspector(clickedCity.id);
+        return;
+      }
+
+      // Empty map tap closes open inspector
+      closeInspector();
+    }
+
+    function updateCursorCoordsUI(sx, sy) {
+      state.pointer.screenX = sx;
+      state.pointer.screenY = sy;
+      const w = screenToWorld(sx, sy);
+      state.pointer.worldX = w.x;
+      state.pointer.worldY = w.y;
+
+      const { lat, lon } = worldToLatLon(w.x, w.y);
+      document.getElementById('hudCoords').textContent = `${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`;
+      document.getElementById('hudMgrs').textContent = formatMgrsLike(w.x, w.y);
+    }
+
+    // Mouse Events on Main Canvas
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 2) {
+        cancelPlacement();
+        return;
+      }
+      state.pointer.isDown = true;
+      state.pointer.hasDragged = false;
+      state.pointer.dragStartX = e.clientX;
+      state.pointer.dragStartY = e.clientY;
+      state.pointer.camStartX = state.camera.x;
+      state.pointer.camStartY = state.camera.y;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      updateCursorCoordsUI(e.clientX, e.clientY);
+      if (!state.pointer.isDown) return;
+      const dx = e.clientX - state.pointer.dragStartX;
+      const dy = e.clientY - state.pointer.dragStartY;
+      if (Math.hypot(dx, dy) > 7) {
+        state.pointer.hasDragged = true;
+        canvas.classList.add('panning');
+      }
+      if (state.pointer.hasDragged) {
+        cameraIsFitted = false;
+        state.camera.x = state.pointer.camStartX - dx / state.camera.zoom;
+        state.camera.y = state.pointer.camStartY - dy / state.camera.zoom;
+        clampCamera();
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (!state.pointer.isDown) return;
+      state.pointer.isDown = false;
+      canvas.classList.remove('panning');
+      if (!state.pointer.hasDragged && e.target === canvas) {
+        const w = screenToWorld(e.clientX, e.clientY);
+        handleMapClick(w.x, w.y, !!e.shiftKey);
+      }
+    });
+
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      cancelPlacement();
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.14 : 0.88;
+      zoomByFactor(factor, e.clientX, e.clientY);
+    }, { passive: false });
+
+    // Touch Events (Single-finger pan/tap + Two-finger pinch zoom)
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        updateCursorCoordsUI(t.clientX, t.clientY);
+        state.pointer.isDown = true;
+        state.pointer.hasDragged = false;
+        state.pointer.dragStartX = t.clientX;
+        state.pointer.dragStartY = t.clientY;
+        state.pointer.camStartX = state.camera.x;
+        state.pointer.camStartY = state.camera.y;
+      } else if (e.touches.length === 2) {
+        state.pointer.isDown = false;
+        const t1 = e.touches[0], t2 = e.touches[1];
+        state.pointer.pinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && state.pointer.isDown) {
+        const t = e.touches[0];
+        updateCursorCoordsUI(t.clientX, t.clientY);
+        const dx = t.clientX - state.pointer.dragStartX;
+        const dy = t.clientY - state.pointer.dragStartY;
+        if (Math.hypot(dx, dy) > 8) {
+          state.pointer.hasDragged = true;
+        }
+        if (state.pointer.hasDragged) {
+          cameraIsFitted = false;
+          state.camera.x = state.pointer.camStartX - dx / state.camera.zoom;
+          state.camera.y = state.pointer.camStartY - dy / state.camera.zoom;
+          clampCamera();
+        }
+      } else if (e.touches.length === 2) {
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const newDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        if (state.pointer.pinchDist > 0) {
+          const factor = newDist / state.pointer.pinchDist;
+          const midX = (t1.clientX + t2.clientX) / 2;
+          const midY = (t1.clientY + t2.clientY) / 2;
+          zoomByFactor(factor, midX, midY);
+        }
+        state.pointer.pinchDist = newDist;
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0 && state.pointer.isDown) {
+        state.pointer.isDown = false;
+        if (!state.pointer.hasDragged) {
+          const w = screenToWorld(state.pointer.dragStartX, state.pointer.dragStartY);
+          handleMapClick(w.x, w.y);
+        }
+      }
+      if (e.touches.length < 2) {
+        state.pointer.pinchDist = 0;
+      }
+    });
+
+    // Minimap Click/Drag Pan
+    function panFromMinimapEvent(e) {
+      const rect = minimapCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const rx = (clientX - rect.left) / rect.width;
+      const ry = (clientY - rect.top) / rect.height;
+      state.camera.x = rx * WORLD_W;
+      state.camera.y = ry * WORLD_H;
+      cameraIsFitted = false;
+      clampCamera();
+    }
+    minimapCanvas.addEventListener('mousedown', panFromMinimapEvent);
+    minimapCanvas.addEventListener('touchstart', panFromMinimapEvent, { passive: true });
+
+    // Keyboard Hotkeys
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '1') selectUnitToPlace('acoustic');
+      else if (e.key === '2') selectUnitToPlace('mvg');
+      else if (e.key === '3') selectUnitToPlace('gepard');
+      else if (e.key === '4') selectUnitToPlace('irist');
+      else if (e.key === '5') selectUnitToPlace('patriot');
+      else if (e.key === ' ') {
+        e.preventDefault();
+        setGameSpeed(state.gameSpeed === 0 ? state.prevSpeedBeforePause : 0);
+      } else if (e.key === 'Escape') {
+        cancelPlacement();
+        closeInspector();
+        closeHelpModal();
+        closeSupportModal();
+      } else if (e.key.toLowerCase() === 'r') {
+        reloadSelectedUnit();
+      } else if (e.key.toLowerCase() === 'e') {
+        toggleSelectedUnitEmcon();
+      } else if (e.key.toLowerCase() === 'f') {
+        resetCameraFit();
+      } else if (e.key === '+' || e.key === '=') {
+        zoomByFactor(1.2);
+      } else if (e.key === '-' || e.key === '_') {
+        zoomByFactor(0.82);
+      }
+    });
+
+    window.addEventListener('resize', resizeCanvas, { passive: true });
+    window.addEventListener('orientationchange', () => requestAnimationFrame(resizeCanvas), { passive: true });
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', resizeCanvas, { passive: true });
+
+    // ============================================================================
+    // MAIN REQUESTANIMATIONFRAME LOOP
+    // ============================================================================
+    let lastTimestamp = 0;
+    let uiSyncTimer = 0;
+
+    function gameLoop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const dt = Math.min(0.05, (timestamp - lastTimestamp) / 1000);
+      lastTimestamp = timestamp;
+
+      updateSimulation(dt);
+      renderMainCanvas();
+
+      uiSyncTimer += dt;
+      if (uiSyncTimer >= 0.25) {
+        uiSyncTimer = 0;
+        updateHudUI();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Boot Application
+    window.onload = function () {
+      resizeCanvas();
+      resetCameraFit();
+      updateHudUI();
+      addCombatLog('Командний пункт ППО активовано. Розгорніть оборону перед Хвилею 1.', 'info');
+      loadUkraineGeoData();
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+
+  <!-- AEGIS VECTOR // COMMAND DECK UPGRADE -->
+  <style>
+    .avx-deck{position:fixed;right:12px;bottom:12px;z-index:24;width:min(292px,calc(100vw - 24px));background:linear-gradient(145deg,rgba(5,18,27,.94),rgba(3,9,15,.92));border:1px solid rgba(34,211,238,.28);border-radius:16px;box-shadow:0 16px 48px #000b,inset 0 1px #ffffff12;backdrop-filter:blur(14px);color:#dbeafe;font:11px 'JetBrains Mono',monospace}
+    .avx-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #164e6380;color:#67e8f9;font-weight:700;letter-spacing:.12em}
+    .avx-body{padding:10px 12px;display:grid;gap:10px}.avx-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.avx-stat{background:#07131dcc;border:1px solid #164e6380;border-radius:9px;padding:7px}.avx-stat b{display:block;font-size:15px;color:#a5f3fc;margin-top:3px}.avx-label{font-size:9px;color:#7894a5;letter-spacing:.12em;text-transform:uppercase}.avx-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}.avx-btn{border:1px solid #155e75;background:#08202b;color:#a5f3fc;border-radius:8px;padding:8px 7px;font:600 10px 'JetBrains Mono',monospace}.avx-btn.active{background:#164e63;border-color:#22d3ee;color:#ecfeff;box-shadow:0 0 12px #0891b233}.avx-btn.warn{border-color:#92400e;color:#fcd34d;background:#271809}.avx-row{display:flex;justify-content:space-between;align-items:center;gap:8px}.avx-note{font:10px Inter,sans-serif;color:#7894a5;line-height:1.4}.avx-chip{padding:3px 6px;border-radius:5px;background:#0c2734;color:#67e8f9;font-size:9px}
+    #avxMeasureReadout{color:#fcd34d;min-height:14px}.avx-deck.collapsed .avx-body{display:none}.avx-btn[hidden]{display:none!important}.avx-save-row{align-items:flex-start}.avx-save-row .avx-note{flex:1;min-width:0}.avx-primary-grid .avx-stat{min-width:0}
+    @media(max-width:700px){.avx-deck{right:8px;bottom:8px;width:min(248px,calc(100vw - 16px))}.avx-body{gap:7px;padding:8px}.avx-stat{padding:5px}.avx-stat b{font-size:13px}.avx-head{padding:8px 10px}.avx-primary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.avx-save-row{flex-wrap:wrap}.avx-save-row .avx-note{flex-basis:100%}#inspectorPanel{max-height:calc(100dvh - 270px);overflow-y:auto}}
+  </style>
+  <section class="avx-deck" id="avxDeck" aria-label="Командна панель AEGIS VECTOR">
+    <div class="avx-head"><span>◈ COMMAND DECK</span><button class="avx-btn" style="padding:3px 7px" onclick="toggleCommandDeck()">—</button></div>
+    <div class="avx-body">
+      <div class="avx-grid avx-primary-grid">
+        <div class="avx-stat"><span class="avx-label">Підрозділи</span><b id="avxUnits">0</b></div>
+        <div class="avx-stat"><span class="avx-label">Загрози</span><b id="avxThreats">0</b></div>
+        <div class="avx-stat"><span class="avx-label">Знищено</span><b id="avxKills">0</b></div>
+        <div class="avx-stat"><span class="avx-label">Очки</span><b id="avxScore">0</b></div>
+      </div>
+      <div>
+        <div class="avx-row" style="margin-bottom:6px"><span class="avx-label">ТАКТИЧНІ ШАРИ</span><span class="avx-chip">LIVE</span></div>
+        <div class="avx-actions">
+          <button class="avx-btn active" id="avxRanges">◎ ЗОНИ РАДІУСУ</button>
+          <button class="avx-btn active" id="avxGrid">▦ СІТКА</button>
+          <button class="avx-btn" id="avxMeasure">↗ ЛІНІЙКА</button>
+          <button class="avx-btn" id="avxRoutes">⌁ ТРАСИ ЦІЛЕЙ</button>
+        </div>
+        <div id="avxMeasureReadout" style="margin-top:7px"></div>
+      </div>
+      <div>
+        <div class="avx-row" style="margin-bottom:6px"><span class="avx-label">БОЙОВА ЕФЕКТИВНІСТЬ</span><span class="avx-chip" id="avxPhase">PREP</span></div>
+        <div class="avx-grid" style="grid-template-columns:1fr 1fr">
+          <div class="avx-stat"><span class="avx-label">Постріли</span><b id="avxShots">0</b></div>
+          <div class="avx-stat"><span class="avx-label">Влучання</span><b id="avxHits">0%</b></div>
+        </div>
+      </div>
+      <div class="avx-row avx-save-row"><span class="avx-note" id="avxSaveStatus">Повне локальне автозбереження готується…</span><button class="avx-btn" id="avxRestore" type="button" hidden>ВІДНОВИТИ</button><button class="avx-btn warn" id="avxResetView">FIT КАРТА</button></div>
+    </div>
+  </section>
+  <script>
+  (() => {
+    const $ = id => document.getElementById(id);
+    const SAVE_KEY = 'aegis_vector_checkpoint_v3';
+    const OLD_SAVE_KEY = 'aegis_vector_checkpoint_v2';
+    const cfg = {ranges:true,grid:true,routes:false,measure:false,points:[]};
+    window.avxConfig = cfg;
+    try {
+      const prefs = JSON.parse(localStorage.getItem('aegis_vector_ui_v2') || '{}');
+      if (prefs && typeof prefs === 'object') Object.assign(cfg, {
+        ranges: prefs.ranges !== false,
+        grid: prefs.grid !== false,
+        routes: prefs.routes === true
+      });
+    } catch (e) {}
+
+    function savePrefs() {
+      try {
+        localStorage.setItem('aegis_vector_ui_v2', JSON.stringify({
+          ranges: cfg.ranges, grid: cfg.grid, routes: cfg.routes
+        }));
+      } catch (e) {}
+    }
+    function setToggle(id, key) {
+      const button = $(id);
+      button.classList.toggle('active', !!cfg[key]);
+      button.addEventListener('click', () => {
+        cfg[key] = !cfg[key];
+        button.classList.toggle('active', cfg[key]);
+        savePrefs();
+      });
+    }
+    setToggle('avxRanges', 'ranges');
+    setToggle('avxGrid', 'grid');
+    setToggle('avxRoutes', 'routes');
+
+    const canvas = $('tacticalCanvas');
+    const measureButton = $('avxMeasure');
+    const measureReadout = $('avxMeasureReadout');
+    function updateMeasureReadout() {
+      if (!cfg.measure) { measureReadout.textContent = ''; return; }
+      if (cfg.points.length < 1) {
+        measureReadout.textContent = 'Оберіть дві точки на карті…';
+      } else if (cfg.points.length === 1) {
+        measureReadout.textContent = 'Точка A зафіксована — оберіть точку B';
+      } else {
+        const [a, b] = cfg.points;
+        const km = Math.hypot(b.x - a.x, b.y - a.y) * KM_PER_UNIT;
+        const bearing = (Math.atan2(b.x - a.x, -(b.y - a.y)) * 180 / Math.PI + 360) % 360;
+        measureReadout.textContent = `${km.toFixed(1)} км  •  азимут ${bearing.toFixed(0)}°`;
+      }
+    }
+    function addMeasurePoint(clientX, clientY) {
+      const point = screenToWorld(clientX, clientY);
+      cfg.points.push(point);
+      if (cfg.points.length > 2) cfg.points.shift();
+      updateMeasureReadout();
+      renderMainCanvas();
+    }
+    measureButton.classList.toggle('active', false);
+    measureButton.addEventListener('click', () => {
+      cfg.measure = !cfg.measure;
+      cfg.points = [];
+      measureButton.classList.toggle('active', cfg.measure);
+      if (cfg.measure) {
+        // A measuring tap must never also place a unit or select a combat entity.
+        if (state.placingUnitType) cancelPlacement();
+        state.pointer.isDown = false;
+        state.pointer.hasDragged = false;
+        canvas.classList.remove('panning');
+      }
+      updateMeasureReadout();
+      renderMainCanvas();
+    });
+
+    // Mouse capture: consume the entire event before the game's normal map click handler.
+    let measureMouseDown = false;
+    window.addEventListener('mousedown', e => {
+      if (!cfg.measure || e.target !== canvas || e.button !== 0) return;
+      measureMouseDown = true;
+      state.pointer.isDown = false;
+      state.pointer.hasDragged = false;
+      canvas.classList.remove('panning');
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }, true);
+    window.addEventListener('mouseup', e => {
+      if (!cfg.measure || e.target !== canvas || e.button !== 0 || !measureMouseDown) return;
+      measureMouseDown = false;
+      state.pointer.isDown = false;
+      state.pointer.hasDragged = false;
+      canvas.classList.remove('panning');
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      addMeasurePoint(e.clientX, e.clientY);
+    }, true);
+
+    // Touch capture: taps set ruler points; drag/pinch stays isolated from placement and selection.
+    let measureTouch = null;
+    window.addEventListener('touchstart', e => {
+      if (!cfg.measure || e.target !== canvas || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      measureTouch = {x:t.clientX, y:t.clientY, moved:false};
+      state.pointer.isDown = false;
+      state.pointer.hasDragged = false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }, {capture:true, passive:false});
+    window.addEventListener('touchmove', e => {
+      if (!cfg.measure || !measureTouch || e.target !== canvas) return;
+      const t = e.touches[0];
+      if (t && Math.hypot(t.clientX - measureTouch.x, t.clientY - measureTouch.y) > 10) {
+        measureTouch.moved = true;
+      }
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }, {capture:true, passive:false});
+    window.addEventListener('touchend', e => {
+      if (!cfg.measure || !measureTouch || e.target !== canvas) return;
+      const touch = measureTouch;
+      measureTouch = null;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!touch.moved) addMeasurePoint(touch.x, touch.y);
+    }, {capture:true, passive:false});
+    window.addEventListener('touchcancel', e => {
+      if (!cfg.measure) return;
+      measureTouch = null;
+      e.stopImmediatePropagation();
+    }, true);
+
+    $('avxResetView').addEventListener('click', () => resetCameraFit());
+
+    // Extend the existing renderer; overlays use the same camera transform as the tactical map.
+    const originalRender = renderMainCanvas;
+    renderMainCanvas = function() {
+      originalRender();
+      if (!cfg.ranges && !cfg.measure && !cfg.routes) return;
+      ctx.save();
+      const cameraView = getCameraViewportMetrics();
+      ctx.translate(cameraView.centerX, cameraView.centerY);
+      ctx.scale(state.camera.zoom, state.camera.zoom);
+      ctx.translate(-state.camera.x, -state.camera.y);
+      if (cfg.ranges) {
+        for (const unit of state.units) {
+          const def = UNIT_TYPES[unit.type];
+          if (!def || !def.range) continue;
+          ctx.beginPath();
+          ctx.arc(unit.x, unit.y, def.range, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(34,211,238,.025)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(34,211,238,.24)';
+          ctx.lineWidth = 1.2 / state.camera.zoom;
+          ctx.setLineDash([5 / state.camera.zoom, 5 / state.camera.zoom]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+      if (cfg.routes) {
+        for (const enemy of state.enemies) {
+          if (!enemy.trail || enemy.trail.length < 2) continue;
+          ctx.beginPath();
+          enemy.trail.forEach((point, i) => i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+          ctx.strokeStyle = 'rgba(251,146,60,.72)';
+          ctx.lineWidth = 2 / state.camera.zoom;
+          ctx.stroke();
+        }
+      }
+      if (cfg.measure && cfg.points.length) {
+        const a = cfg.points[0];
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, 5 / state.camera.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = '#fbbf24';
+        ctx.fill();
+        if (cfg.points[1]) {
+          const b = cfg.points[1];
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = 2 / state.camera.zoom;
+          ctx.setLineDash([8 / state.camera.zoom, 5 / state.camera.zoom]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, 5 / state.camera.zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    };
+
+    // The inspector and command deck share the right-side workspace on every viewport.
+    // Never leave both visible at once; this is not only a phone-specific constraint.
+    function adaptInspectorLayout() {
+      const deck = $('avxDeck');
+      if (deck) deck.classList.add('collapsed');
+      document.body.classList.add('avx-inspector-open');
+      document.body.classList.remove('avx-deck-open');
+    }
+    const originalOpenUnitInspector = openUnitInspector;
+    openUnitInspector = function(id) {
+      originalOpenUnitInspector(id);
+      adaptInspectorLayout();
+    };
+    const originalOpenCityInspector = openCityInspector;
+    openCityInspector = function(id) {
+      originalOpenCityInspector(id);
+      adaptInspectorLayout();
+    };
+    const originalCloseInspector = closeInspector;
+    closeInspector = function() {
+      originalCloseInspector();
+      document.body.classList.remove('avx-inspector-open');
+    };
+
+    // Full resumable checkpoint. Ephemeral visual particles are excluded only as a quota fallback.
+    function safeNumber(value) { return typeof value === 'number' && Number.isFinite(value); }
+    function isValidSnapshot(record) {
+      if (!record || record.schemaVersion !== 3 || !safeNumber(record.savedAt)) return false;
+      const s = record.state;
+      if (!s || typeof s !== 'object' || !['prep','combat'].includes(s.phase)) return false;
+      if (!Number.isInteger(s.wave) || s.wave < 1 || !safeNumber(s.money) || !safeNumber(s.score)) return false;
+      if (!Array.isArray(s.cities) || !Array.isArray(s.units) || !Array.isArray(s.enemies) ||
+          !Array.isArray(s.projectiles) || !Array.isArray(s.waveSpawnQueue) || !Array.isArray(s.combatLogs)) return false;
+      if (!s.waveStats || !safeNumber(s.waveStats.shotsFired) || !safeNumber(s.waveStats.hits) ||
+          !safeNumber(s.waveStats.destroyed) || !safeNumber(s.waveStats.leaked) || !safeNumber(s.waveStats.totalTargets)) return false;
+      if (!s.camera || !safeNumber(s.camera.x) || !safeNumber(s.camera.y) || !safeNumber(s.camera.zoom)) return false;
+      if (s.cities.some(c => !c || typeof c.id !== 'string' || !safeNumber(c.hp))) return false;
+      if (s.units.some(u => !u || typeof u.uid !== 'string' || !UNIT_TYPES[u.type] ||
+          !safeNumber(u.x) || !safeNumber(u.y) || !safeNumber(u.hp) || !safeNumber(u.ammo))) return false;
+      if (s.enemies.some(e => !e || typeof e.uid !== 'string' || !ENEMY_TYPES[e.type] ||
+          !safeNumber(e.x) || !safeNumber(e.y) || !safeNumber(e.hp))) return false;
+      return true;
+    }
+    function stamp(time) {
+      return new Date(time).toLocaleTimeString('uk-UA', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    }
+    function showSaveStatus(message) {
+      $('avxSaveStatus').textContent = message;
+    }
+    function refreshRestoreButton(record) {
+      const button = $('avxRestore');
+      if (record && isValidSnapshot(record)) {
+        button.hidden = false;
+        button.textContent = `ВІДНОВИТИ • ХВ. ${record.state.wave}`;
+        showSaveStatus(`Повний запис • ${stamp(record.savedAt)}`);
+      } else {
+        button.hidden = true;
+      }
+    }
+    function readSnapshot() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return null;
+        const record = JSON.parse(raw);
+        return isValidSnapshot(record) ? record : null;
+      } catch (e) { return null; }
+    }
+    function writeSnapshot() {
+      if (state.phase === 'gameover') {
+        try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+        $('avxRestore').hidden = true;
+        showSaveStatus('Операцію завершено • запис очищено');
+        return;
+      }
+      try {
+        const copy = JSON.parse(JSON.stringify(state));
+        if (copy.pointer) {
+          copy.pointer.isDown = false;
+          copy.pointer.hasDragged = false;
+          copy.pointer.pinchDist = 0;
+        }
+        copy.placingUnitType = null;
+        const record = {schemaVersion:3, savedAt:Date.now(), state:copy};
+        let serialized = JSON.stringify(record);
+        try {
+          localStorage.setItem(SAVE_KEY, serialized);
+        } catch (quotaError) {
+          // Retain all gameplay state if possible; drop only transient visual/log arrays first.
+          copy.particles = [];
+          copy.floatingTexts = [];
+          copy.combatLogs = (copy.combatLogs || []).slice(0, 4);
+          record.state = copy;
+          serialized = JSON.stringify(record);
+          localStorage.setItem(SAVE_KEY, serialized);
+        }
+        refreshRestoreButton(record);
+      } catch (e) {
+        showSaveStatus('Помилка локального запису • перевірте пам’ять браузера');
+      }
+    }
+    function restoreSnapshot() {
+      const record = readSnapshot();
+      if (!record) {
+        showSaveStatus('Запис відсутній або пошкоджений');
+        $('avxRestore').hidden = true;
+        return;
+      }
+      const when = new Date(record.savedAt).toLocaleString('uk-UA');
+      if (!window.confirm(`Відновити операцію зі стану ${when}? Поточний стан буде замінено.`)) return;
+      const saved = record.state;
+      for (const key of Object.keys(state)) {
+        if (Object.prototype.hasOwnProperty.call(saved, key)) state[key] = saved[key];
+      }
+      if (!safeNumber(state.totalDestroyed)) state.totalDestroyed = state.waveStats.destroyed || 0;
+      state.pointer = {
+        screenX:0, screenY:0, worldX:WORLD_W/2, worldY:WORLD_H/2,
+        isDown:false, dragStartX:0, dragStartY:0, camStartX:0, camStartY:0,
+        hasDragged:false, pinchDist:0
+      };
+      state.placingUnitType = null;
+      if (!state.units.some(u => u.uid === state.selectedUnitId)) state.selectedUnitId = null;
+      if (!state.cities.some(c => c.id === state.selectedCityId)) state.selectedCityId = null;
+      if (!state.enemies.some(e => e.uid === state.priorityEnemyId)) state.priorityEnemyId = null;
+      if (![0,1,2].includes(state.gameSpeed)) state.gameSpeed = 1;
+      if (![0,1,2].includes(state.prevSpeedBeforePause)) state.prevSpeedBeforePause = 1;
+      cameraIsFitted = false;
+
+      $('debriefModal').classList.add('hidden');
+      $('urgentBanner').classList.toggle('hidden', !state.enemies.some(e => e.isBallistic));
+      $('placementBar').classList.add('hidden');
+      $('inspectorPanel').classList.add('hidden');
+      document.body.classList.remove('avx-inspector-open');
+      cfg.measure = false;
+      cfg.points = [];
+      measureButton.classList.remove('active');
+      updateMeasureReadout();
+      clampCamera();
+      updateScaleBarUI();
+      updateHudUI();
+      renderCombatLog();
+      setGameSpeed(state.gameSpeed);
+      if (state.selectedUnitId) openUnitInspector(state.selectedUnitId);
+      else if (state.selectedCityId) openCityInspector(state.selectedCityId);
+      showSaveStatus(`Відновлено • ${stamp(record.savedAt)}`);
+      addCombatLog(`Стан операції відновлено: хвиля ${state.wave}`, 'success');
+    }
+    $('avxRestore').addEventListener('click', restoreSnapshot);
+
+    // Correct real-time telemetry: operation kills are cumulative and score is separate.
+    const originalHud = updateHudUI;
+    updateHudUI = function() {
+      originalHud();
+      $('avxUnits').textContent = state.units.length;
+      $('avxThreats').textContent = state.enemies.length + state.waveSpawnQueue.length;
+      $('avxKills').textContent = state.totalDestroyed || 0;
+      $('avxScore').textContent = state.score;
+      $('avxShots').textContent = state.waveStats.shotsFired;
+      $('avxHits').textContent = state.waveStats.shotsFired
+        ? Math.round(state.waveStats.hits / state.waveStats.shotsFired * 100) + '%'
+        : '—';
+      $('avxPhase').textContent = state.phase.toUpperCase();
+    };
+
+    // Update restored-state availability immediately; legacy v2 records are not full saves.
+    const existing = readSnapshot();
+    if (existing) {
+      refreshRestoreButton(existing);
+    } else {
+      $('avxRestore').hidden = true;
+      let hasLegacy = false;
+      try { hasLegacy = !!localStorage.getItem(OLD_SAVE_KEY); } catch (e) {}
+      showSaveStatus(hasLegacy
+        ? 'Знайдено старий checkpoint • створюється повний запис'
+        : 'Повне локальне автозбереження активне');
+    }
+
+    window.setInterval(writeSnapshot, 5000);
+    window.addEventListener('pagehide', writeSnapshot);
+    window.addEventListener('beforeunload', writeSnapshot);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') writeSnapshot();
+    });
+
+    updateHudUI();
+  })();
+  </script>
+
+
+<script id="aegis-stage1-ui-controller">
+(function(){
+  const deck = document.getElementById('avxDeck');
+  const body = document.body;
+  function syncResponsiveUI(){
+    const landscape = window.matchMedia('(max-height: 520px) and (orientation: landscape)').matches;
+    const mobile = window.matchMedia('(max-width: 760px)').matches || landscape;
+    body.classList.toggle('avx-mobile', mobile);
+    body.classList.toggle('avx-landscape-phone', landscape);
+    const toggle = deck && deck.querySelector('.avx-head button');
+    if (mobile && deck) {
+      deck.classList.add('collapsed');
+      body.classList.remove('avx-deck-open');
+      if (toggle) { toggle.textContent = '+'; toggle.setAttribute('aria-label','Розгорнути командну панель'); }
+    } else if (!mobile && deck && !body.classList.contains('avx-inspector-open')) {
+      deck.classList.remove('collapsed');
+      body.classList.remove('avx-deck-open');
+      if (toggle) { toggle.textContent = '—'; toggle.setAttribute('aria-label','Згорнути командну панель'); }
+    }
+  }
+  window.toggleCommandDeck = function(){
+    if (!deck) return;
+    const collapsed = deck.classList.toggle('collapsed');
+    body.classList.toggle('avx-deck-open', !collapsed);
+    const toggle = deck.querySelector('.avx-head button');
+    if (toggle) { toggle.textContent = collapsed ? '+' : '—'; toggle.setAttribute('aria-label', collapsed ? 'Розгорнути командну панель' : 'Згорнути командну панель'); }
+  };
+  window.addEventListener('resize', syncResponsiveUI, {passive:true});
+  window.addEventListener('orientationchange', syncResponsiveUI, {passive:true});
+  syncResponsiveUI();
+})();
+</script>
+
+</body>
+</html>
